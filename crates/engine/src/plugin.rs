@@ -3,7 +3,7 @@
 use crate::{EngineError, Result, Session};
 pub use craft_plugin::{
     API, Effect, Entry, EntryKind, FileGrant, HostError, HostLimits, Limits, LossItem, LossReport, LossSeverity, MAX_COMPONENT_BYTES, MAX_JSON_BYTES,
-    MAX_MANIFEST_BYTES, MAX_MEMORY_MIB, Manifest, RuntimeManifest, UiSlot, check_input, valid_id,
+    MAX_MANIFEST_BYTES, MAX_MEMORY_MIB, Manifest, RuntimeManifest, UiSlot, check_input, conditions, valid_id,
 };
 use craft_plugin::{CommandSchema, PluginHost};
 use serde_json::{Value, json};
@@ -72,6 +72,9 @@ pub struct AppState {
     /// Where `plugin.install` writes and `plugin.list` looks; `None`: the per-user
     /// `plugins` folder ([`crate::recovery::data_dir`]).
     pub plugins_dir: Option<PathBuf>,
+    /// The plugin whose run is under way, when it keeps data in designs (`storage@0.1`): the only
+    /// one that may change plugin data, and only its own. Set by the host for that run alone.
+    pub storage_caller: Option<storage::StorageCaller>,
     /// Set when `grants` is kept in the plugins folder's grant store between sessions (the command
     /// line and headless MCP with `--keep-plugin-approvals`): what this session last read from or wrote to it. `None`: the
     /// grants live only in this session, or the app keeps them itself (the desktop app).
@@ -152,7 +155,11 @@ pub fn parse_manifest(text: &[u8], folder: &str) -> Result<Manifest> {
                 format!("unknown command group `{group}`; SolidCraft has {}", COMMAND_GROUPS.join(", ")),
             ));
         }
+        let storage = manifest.capabilities.iter().any(|capability| capability.starts_with("storage@"));
         for command in &runtime.commands {
+            if command.starts_with("storage.") && !storage {
+                return Err(refuse("runtime.commands", format!("`{command}` needs the storage capability: add \"storage@0.1\" to capabilities")));
+            }
             if catalog_command(command).is_none() {
                 return Err(refuse(
                     "runtime.commands",
@@ -323,9 +330,10 @@ fn run_package(session: &mut Session, package: Package, entry: &str, params: &se
     }
     let rt = package.manifest.runtime.as_ref().ok_or_else(|| error("no executable runtime"))?;
     host_limits_for(session, &package.manifest.id, &package.approval).check(&rt.limits)?;
-    if !rt.entries.iter().any(|e| e.name == entry) {
-        return Err(error("unknown entry"));
-    }
+    let declared = rt.entries.iter().find(|e| e.name == entry).ok_or_else(|| error("unknown entry"))?;
+    let prepared =
+        conditions::has_conditions(&declared.input_schema).then(|| craft_plugin::prepare_input(&declared.input_schema, params)).transpose()?;
+    let params = prepared.as_ref().unwrap_or(params);
     #[cfg(all(feature = "plugins", any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
         // What this call may reach: the groups both the manifest asks for and the user granted,
@@ -334,6 +342,15 @@ fn run_package(session: &mut Session, package: Package, entry: &str, params: &se
         let groups: BTreeSet<String> = rt.permissions.command_groups.intersection(&grants.command_groups).cloned().collect();
         let mut scratch = session.scratch();
         scratch.plugin_state.file_grants = grants.folders;
+        scratch.plugin_state.storage_caller =
+            rt.data_format.filter(|_| package.manifest.capabilities.iter().any(|c| c.starts_with("storage@"))).map(|data_format| {
+                storage::StorageCaller {
+                    id: package.manifest.id.clone(),
+                    name: package.manifest.name.clone(),
+                    version: package.manifest.version.clone(),
+                    data_format,
+                }
+            });
         let host = SolidCraftHost {
             session: scratch,
             transaction: None,
@@ -376,6 +393,7 @@ pub mod install;
 pub mod messages;
 #[cfg(not(target_arch = "wasm32"))]
 mod package;
+pub mod storage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use package::{remove, store_grants, validate_grants};
 
