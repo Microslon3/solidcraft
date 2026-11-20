@@ -1172,6 +1172,7 @@ fn crossing_stretch_certified<O: ClassObject>(
         }
     }
     Ok(true)
+}
 
 /// The most Newton steps [`common_point`] takes: a bound on the loop; convergence is
 /// checked at each step, never assumed.
