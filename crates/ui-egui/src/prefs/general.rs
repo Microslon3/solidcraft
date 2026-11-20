@@ -277,9 +277,10 @@ fn file_size_rows(app: &mut SolveApp, ui: &mut egui::Ui, labels: f32) {
 /// removed, or all forgotten; a design in one of them that is removed asks again.
 fn link_folders(app: &mut SolveApp, ui: &mut egui::Ui) {
     let t = Tokens::get();
-    ui_kit::settings_inline_note(ui, app.tr("prefs.link_folders_note"));
+    // Wrapped, so a narrow window keeps the notes inside the page.
+    ui.horizontal_wrapped(|ui| ui_kit::settings_inline_note(ui, app.tr("prefs.link_folders_note")));
     if app.preferences.linked_file_folders.is_empty() {
-        ui_kit::settings_inline_note(ui, app.tr("prefs.link_folders_none"));
+        ui.horizontal_wrapped(|ui| ui_kit::settings_inline_note(ui, app.tr("prefs.link_folders_none")));
         return;
     }
     let mut remove = None;
