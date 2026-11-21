@@ -381,10 +381,10 @@ index a08202da7..3e26a8f1a 100644
          // make a brep for the new face
 diff --git a/solidcore/crates/solidcore/src/blend/feature_executive/annular.rs b/solidcore/crates/solidcore/src/blend/feature_executive/annular.rs
 new file mode 100644
-index 000000000..29ed22a1e
+index 000000000..8b91794f0
 --- /dev/null
 +++ b/solidcore/crates/solidcore/src/blend/feature_executive/annular.rs
-@@ -0,0 +1,476 @@
+@@ -0,0 +1,481 @@
 +//! Joint extension across the two circumferential boundaries of a turned feature.
 +//! Each circle bounds an entire period of the support. Trimming to either one alone
 +//! discards the very band between them.
@@ -395,6 +395,7 @@ index 000000000..29ed22a1e
 +};
 +use crate::blend::fillet_section::{interval::Ivl, station::as_b_spline};
 +use crate::curve::curve::CurveKind;
++use crate::error::blend::BlendFailure;
 +use crate::error::defeature::DefeatureFailure;
 +use crate::error::{Result, SolidError};
 +use crate::geom::tol::{self, SmallTopoType};
@@ -815,9 +816,11 @@ index 000000000..29ed22a1e
 +            .filter(|&&id| base.face(id).is_ok())
 +            .count();
 +        if remaining != faces.len() {
-+            return Err(SolidError::blend_failed(
++            return Err(SolidError::blend(
 +                super::OP,
-+                "the circular joins could not be merged into their supports",
++                BlendFailure::Defect {
++                    why: "coalescing the certified circular joins left the wrong number of support faces",
++                },
 +            ));
 +        }
 +        // CopyFaces binds under its notification names. The surviving patch surface
@@ -834,9 +837,11 @@ index 000000000..29ed22a1e
 +        }
 +        stitch_and_orient(k, feature)?;
 +        if !brep_is_manifold_solid(base)? || !brep_is_manifold_solid(feature)? {
-+            return Err(SolidError::blend_failed(
++            return Err(SolidError::blend(
 +                super::OP,
-+                "the circular patch did not close the boundary",
++                BlendFailure::Defect {
++                    why: "stitching the patch between the two certified rims left a non-manifold solid",
++                },
 +            ));
 +        }
 +        let id = add_patch(patches, patch);
