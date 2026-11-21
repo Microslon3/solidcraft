@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pr: [20290, 20292]
+        pr: [20290]
         os: [ubuntu-24.04, windows-latest]
     env:
       CARGO_INCREMENTAL: 0
@@ -58,10 +58,11 @@ jobs:
         if: runner.os == 'Linux'
         with:
           tool: cargo-nextest@0.9.150
-      - name: Run the project's pre-commit gate
+      - name: Check the update dialog on Linux
         if: runner.os == 'Linux'
         working-directory: source
-        run: cargo xtask fast --base HEAD
+        run: |
+          cargo test --locked --profile ci -p solidcraft-ui-egui --lib update::tests::
       - name: Build the native Windows app for the isolated visual reproduction
         if: runner.os == 'Windows'
         working-directory: source

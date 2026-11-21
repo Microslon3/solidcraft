@@ -1,5 +1,5 @@
 diff --git a/crates/ui-egui/src/update.rs b/crates/ui-egui/src/update.rs
-index ccfbca5b271884b893c2fd54da81b294eae2ff6f..4698b630dd5f043c936d07175f2c95b373d98c0b 100644
+index ccfbca5b271884b893c2fd54da81b294eae2ff6f..455a0bb47fdd6383f0f88bbdce7cc57ece425741 100644
 --- a/crates/ui-egui/src/update.rs
 +++ b/crates/ui-egui/src/update.rs
 @@ -1040,8 +1040,11 @@ pub fn show(app: &mut SolveApp, ctx: &egui::Context) {
@@ -59,7 +59,7 @@ index ccfbca5b271884b893c2fd54da81b294eae2ff6f..4698b630dd5f043c936d07175f2c95b3
 +                    if index > start {
 +                        ui.add(egui::Label::new(job(&spans[start..index], size, strong, wrap)).wrap());
 +                    }
-+                    ui.hyperlink_to(RichText::new(text).size(size), url).backing_on_hover_text(url);
++                    ui.hyperlink_to(RichText::new(text).size(size).color(t.accent), url).backing_on_hover_text(url);
 +                    start = index + 1;
 +                }
 +            }
@@ -107,10 +107,10 @@ index ccfbca5b271884b893c2fd54da81b294eae2ff6f..4698b630dd5f043c936d07175f2c95b3
                  links(ui, spans, indent + 14.0);
              }
 diff --git a/crates/ui-egui/src/update/tests.rs b/crates/ui-egui/src/update/tests.rs
-index 99b710d16c76435cf41ca492cc103009d7644db8..d6c5fd1c1d1b5d3858fe173b9ad9f24e75e7b003 100644
+index 99b710d16c76435cf41ca492cc103009d7644db8..5457f9caa87be7036c2be994c858779906826b95 100644
 --- a/crates/ui-egui/src/update/tests.rs
 +++ b/crates/ui-egui/src/update/tests.rs
-@@ -628,6 +628,74 @@ fn the_title_bar_offers_the_new_version_and_opens_the_update_window() {
+@@ -628,6 +628,73 @@ fn the_title_bar_offers_the_new_version_and_opens_the_update_window() {
      assert!(h.widget(&label).is_none(), "Remind me later hides it");
  }
  
@@ -168,15 +168,14 @@ index 99b710d16c76435cf41ca492cc103009d7644db8..d6c5fd1c1d1b5d3858fe173b9ad9f24e
 +    let target = "https://github.com/tangency-labs/solidcraft/pull/16906";
 +    let mut h = windows_update_offer(&format!("- Faster rebuilds by somebody in {target}."));
 +    h.frames(3);
-+    let texts: Vec<_> = h
-+        .shapes
-+        .iter()
-+        .filter_map(|shape| match &shape.shape {
-+            egui::Shape::Text(text) => Some(text.galley.job.text.as_str()),
-+            _ => None,
-+        })
-+        .collect();
-+    assert_eq!(texts.iter().filter(|text| text.contains("#16906")).count(), 1, "{texts:?}");
++    let mut labels = h.shapes.iter().filter_map(|shape| match &shape.shape {
++        egui::Shape::Text(text) if text.galley.job.text.contains("#16906") => Some(&text.galley.job),
++        _ => None,
++    });
++    let label = labels.next().expect("the release note shows its PR number");
++    assert!(labels.next().is_none(), "the PR number is painted only once");
++    assert_eq!(label.text, "#16906");
++    assert!(label.sections.iter().all(|section| section.format.color == Tokens::get().accent), "the link uses the theme accent");
 +    let [x, y] = h.widget("#16906").expect("the visible PR number is a native link");
 +    h.call("ui.click", json!({"x":x,"y":y}));
 +    assert_eq!(h.take_opened(), [target]);
