@@ -1,0 +1,74 @@
+{
+  "description": "The ring groove reported in issue 19624, in millimetres. A central cylinder and two collars give the seven boundary faces of a shaft with a rectangular ring groove.",
+  "commands": [
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "base": [
+          0,
+          0,
+          0
+        ],
+        "radius": 4,
+        "height": 20,
+        "body_name": "Shaft"
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "base": [
+          0,
+          0,
+          0
+        ],
+        "radius": 5,
+        "height": 8,
+        "operation": "join",
+        "targets": [
+          "Shaft"
+        ]
+      }
+    },
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "base": [
+          0,
+          0,
+          12
+        ],
+        "radius": 5,
+        "height": 8,
+        "operation": "join",
+        "targets": [
+          "Shaft"
+        ]
+      }
+    },
+    {
+      "command": "face.delete",
+      "params": {
+        "body": "Shaft",
+        "faces": [
+          [
+            4.5,
+            0,
+            8
+          ],
+          [
+            4,
+            0,
+            10
+          ],
+          [
+            4.5,
+            0,
+            12
+          ]
+        ],
+        "heal": true
+      }
+    }
+  ]
+}
