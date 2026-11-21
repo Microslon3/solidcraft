@@ -1,0 +1,211 @@
+diff --git a/crates/ui-egui/src/navigation.rs b/crates/ui-egui/src/navigation.rs
+index a7d6ec3f3f2ceaee62de787d143460dbbd1721ef..78f237c9badd76da74eeee56bcc796d9dcf42143 100644
+--- a/crates/ui-egui/src/navigation.rs
++++ b/crates/ui-egui/src/navigation.rs
+@@ -12,6 +12,7 @@
+ 
+ use egui::{Pos2, Rect, pos2, vec2};
+ use serde_json::json;
++use solidcore_ops::affine::{distance_along, line_plane_parameter, line_point_at};
+ use solidcore_ops::{point_displacement, point_distance, point_set_summary};
+ use solidcore_record::Vec3;
+ use solidcraft_engine::geom::prelude::*;
+@@ -1549,8 +1550,9 @@ pub(crate) fn device_camera(
+             let p = match pivot {
+                 DeviceOrbitPivot::Point(p) => p,
+                 DeviceOrbitPivot::ViewDepth(reference) => {
+-                    let depth = cam.frame_coords(reference).z;
+-                    let p = cam.target + cam.back() * depth;
++                    let back = cam.back().into();
++                    let depth = distance_along(cam.target.into(), back, reference.into());
++                    let p = Vec3::from(line_point_at(cam.target.into(), back, depth));
+                     if p.is_finite() && (cam.fov <= 0.0 || depth < cam.distance - 1e-9) { p } else { cam.target }
+                 }
+             };
+@@ -1858,11 +1860,7 @@ fn view_pivot_at(app: &SolveApp, proj: &Proj, at: Pos2) -> Option<Vec3> {
+     let centre = proj.rect.center();
+     let centred = at.distance(centre) < 0.5;
+     let (origin, dir, material) = crate::view_pick::orbit_ray(app, proj, if centred { centre } else { at });
+-    let along = dir.dot(proj.cam.back());
+-    if along.abs() < 1e-9 {
+-        return None;
+-    }
+-    let target = -proj.cam.frame_coords(origin).z / along;
++    let target = line_plane_parameter(origin.into(), dir.into(), proj.cam.target.into(), proj.cam.back().into(), 1e-9)?;
+     let depth = match material {
+         Some((near, far)) if !(near..=far).contains(&target) => f64::midpoint(near, far),
+         _ => target,
+@@ -1871,7 +1869,7 @@ fn view_pivot_at(app: &SolveApp, proj: &Proj, at: Pos2) -> Option<Vec3> {
+     if centred && depth == target {
+         return None;
+     }
+-    let pivot = origin + dir * depth;
++    let pivot = Vec3::from(line_point_at(origin.into(), dir.into(), depth));
+     pivot.is_finite().then_some(pivot)
+ }
+ 
+diff --git a/solidcore/crates/solidcore-ops/src/affine.rs b/solidcore/crates/solidcore-ops/src/affine.rs
+index 3a81ca00b7c55b8182c8ee3507810b097611d8f2..2a644413596d454210c94a0b0066e3862208eeee 100644
+--- a/solidcore/crates/solidcore-ops/src/affine.rs
++++ b/solidcore/crates/solidcore-ops/src/affine.rs
+@@ -7,11 +7,13 @@
+ //! [`solidcore::Transform::concat`], [`solidcore::Transform::inverse`]); ops checks the
+ //! numbers and passes them on. Beside them, how far a point or a box reaches along a direction
+ //! ([`distance_along`], [`span_along`]), as the kernel measures it, a point under a map
+-//! ([`apply_point`]), and the quads a pinned picture is drawn on ([`picture_frame`],
++//! ([`apply_point`]), where a line meets a plane ([`line_plane_parameter`], [`line_point_at`]),
++//! and the quads a pinned picture is drawn on ([`picture_frame`],
+ //! [`lifted_quad`], [`parallelogram_point`]).
+ 
+ use solidcore::geom::certified::Verdict;
+ use solidcore::geom::extent3d::Extent3d;
++use solidcore::geom::geom_utility::p1 as geom;
+ use solidcore::{Transform, Vec3};
+ 
+ use crate::body::REGULAR_RATIO;
+@@ -156,6 +158,33 @@ pub fn distance_along(origin: [f64; 3], direction: [f64; 3], point: [f64; 3]) ->
+     Vec3::from(point).distance_along(Vec3::from(origin), Vec3::from(direction))
+ }
+ 
++/// The signed parameter where a line meets a plane, through the kernel.
++/// A line is parallel when the absolute projection of its direction onto the normal is
++/// less than the caller's positive `min_abs_dot`.
++#[must_use]
++pub fn line_plane_parameter(
++    origin: [f64; 3],
++    direction: [f64; 3],
++    plane_origin: [f64; 3],
++    normal: [f64; 3],
++    min_abs_dot: f64,
++) -> Option<f64> {
++    geom::line_plane_parameter(
++        vec3(origin),
++        vec3(direction),
++        vec3(plane_origin),
++        vec3(normal),
++        min_abs_dot,
++    )
++}
++
++/// The kernel's point at a signed parameter along a line.
++#[must_use]
++pub fn line_point_at(origin: [f64; 3], direction: [f64; 3], parameter: f64) -> [f64; 3] {
++    let p = geom::line_point_at(vec3(origin), vec3(direction), parameter);
++    [p.x, p.y, p.z]
++}
++
+ /// `point` under `matrix` (the row-vector convention above: `p·A + t`), through
+ /// [`Transform::transform_points`].
+ pub fn apply_point(matrix: &Matrix, point: [f64; 3]) -> [f64; 3] {
+diff --git a/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs b/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs
+index 0de4f1e32543086193b071e65526d20308af0f28..b84438fd3e351070c27991fa627b2121501c7e9a 100644
+--- a/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs
++++ b/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs
+@@ -414,16 +414,58 @@ pub fn line_plane_intersect(
+ 
+     let plane_eq_d = -plane_norm.dot(plane_pnt);
+     let tol = EFF_ZERO * line_vec.max_dimension() + EFF_ZERO_SQ;
+-    let denom = line_vec.dot(plane_norm);
++    line_plane_parameter_from_offset(line_vec, plane_norm, tol, || {
++        plane_eq_d + line_pnt.dot(plane_norm)
++    })
++    .ok_or_else(|| SolidError::geom_failed(OP, "the line is parallel to the plane"))
++}
+ 
+-    if denom.abs() < tol {
+-        return Err(SolidError::geom_failed(
+-            OP,
+-            "the line is parallel to the plane",
+-        )); // Parallel case
++/// The signed parameter where a line meets the plane through the given point.
++/// `min_abs_dot` is the caller's positive cutoff on the absolute dot product of the
++/// line direction and plane normal. Below that cutoff the line is considered parallel.
++/// The offset is measured from the plane's point before projecting, preserving small
++/// offsets when both points are far from the world origin. Returns no parameter for
++/// invalid inputs or non-finite results.
++#[must_use]
++pub fn line_plane_parameter(
++    line_pnt: Point3,
++    line_vec: Vec3,
++    plane_pnt: Point3,
++    plane_norm: Vec3,
++    min_abs_dot: f64,
++) -> Option<f64> {
++    let finite = |v: Vec3| v.x.is_finite() && v.y.is_finite() && v.z.is_finite();
++    if !(min_abs_dot.is_finite()
++        && min_abs_dot > 0.0
++        && [line_pnt, line_vec, plane_pnt, plane_norm]
++            .into_iter()
++            .all(finite))
++    {
++        return None;
+     }
++    line_plane_parameter_from_offset(line_vec, plane_norm, min_abs_dot, || {
++        line_pnt.distance_along(plane_pnt, plane_norm)
++    })
++    .filter(|parameter| parameter.is_finite())
++}
+ 
+-    Ok(-(plane_eq_d + line_pnt.dot(plane_norm)) / denom)
++fn line_plane_parameter_from_offset(
++    line_vec: Vec3,
++    plane_norm: Vec3,
++    min_abs_dot: f64,
++    offset: impl FnOnce() -> f64,
++) -> Option<f64> {
++    let denom = line_vec.dot(plane_norm);
++    if denom.abs() < min_abs_dot {
++        return None;
++    }
++    Some(-offset() / denom)
++}
++
++/// A point at a signed parameter along a line, `origin + parameter * direction`.
++#[must_use]
++pub fn line_point_at(origin: Point3, direction: Vec3, parameter: f64) -> Point3 {
++    origin + direction * parameter
+ }
+ 
+ /// Intersection of the line `line_pt + t * line_vec` with the plane
+@@ -1933,6 +1975,41 @@ mod tests {
+         assert!((a - 45.0).abs() < 1e-12);
+     }
+ 
++    #[test]
++    fn line_plane_parameter_uses_the_caller_cutoff_and_relative_origin() {
++        let origin = v(1e16, 1e16, 4.0);
++        let plane = v(1e16, 1e16, 3.0);
++        let direction = v(0.0, 0.0, 2.0);
++        let parameter = line_plane_parameter(origin, direction, plane, v(1.0, 1.0, 1.0), 1e-9);
++        // Subtracting the world-coordinate projections would lose the 1 mm offset.
++        assert_eq!(parameter, Some(-0.5));
++        assert_eq!(line_point_at(origin, direction, parameter.unwrap()), plane);
++
++        let point = v(0.0, 0.0, 1e-9);
++        assert_eq!(
++            line_plane_parameter(Vec3::ZERO, v(1.0, 0.0, 0.5e-9), point, Vec3::Z, 1e-9),
++            None
++        );
++        assert_eq!(
++            line_plane_parameter(Vec3::ZERO, v(1.0, 0.0, 1e-9), point, Vec3::Z, 1e-9),
++            Some(1.0)
++        );
++        assert_eq!(
++            line_plane_parameter(Vec3::ZERO, v(f64::NAN, 0.0, 1.0), point, Vec3::Z, 1e-9),
++            None
++        );
++        assert_eq!(
++            line_plane_parameter(
++                v(f64::MAX, 0.0, 0.0),
++                Vec3::X,
++                v(-f64::MAX, 0.0, 0.0),
++                Vec3::X,
++                1e-9
++            ),
++            None
++        );
++    }
++
+     #[test]
+     fn circles() {
+         let c = circle_center_from_3_points(

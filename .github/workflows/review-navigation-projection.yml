@@ -1,0 +1,135 @@
+name: Navigation geometry review
+on:
+  push:
+    branches: [codex/review-checks-20290-20292]
+    paths: ['.github/workflows/review-navigation-projection.yml', 'navigation-projection.patch', 'navigation-projection-tree.txt']
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: 'Repository checks, Clippy and WebAssembly', os: ubuntu-24.04, kind: static }
+          - { name: 'Application kernel and UI tests', os: ubuntu-24.04, kind: application }
+          - { name: 'SolidCore tests 1 of 3', os: ubuntu-24.04, kind: core, part: '1/3' }
+          - { name: 'SolidCore tests 2 of 3', os: ubuntu-24.04, kind: core, part: '2/3' }
+          - { name: 'SolidCore tests 3 of 3', os: ubuntu-24.04, kind: core, part: '3/3' }
+          - { name: 'Reference geometry results', os: ubuntu-24.04, kind: goldens }
+          - { name: 'Native Windows executable', os: windows-latest, kind: winbuild }
+          - { name: 'Windows navigation and input tests', os: windows-latest, kind: wintest }
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_CI_DEBUG: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_GOLDENS_DEBUG: 0
+      CARGO_PROFILE_GOLDENS_INCREMENTAL: 'false'
+      CARGO_BUILD_JOBS: 3
+      RUST_MIN_STACK: 8388608
+      NEXTEST_TEST_THREADS: 2
+      RUST_TEST_THREADS: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: proof
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Microslon3/solidcraft
+          ref: deb67a2a17e0bcc842e741589a64fd012ac2476e
+          path: source
+          persist-credentials: false
+      - name: Verify the tested source tree
+        working-directory: source
+        shell: bash
+        run: |
+          git -C ../proof cat-file blob HEAD:navigation-projection.patch > "$RUNNER_TEMP/navigation-projection.patch"
+          git apply --cached "$RUNNER_TEMP/navigation-projection.patch"
+          git diff --cached --name-only -z | git checkout-index -f -z --stdin
+          git diff --quiet
+          git diff --cached --check
+          git diff --cached --stat
+          tree=$(git write-tree)
+          echo "Git tree $tree"
+          test "$tree" = "$(git -C ../proof show HEAD:navigation-projection-tree.txt)"
+      - name: Select the project toolchain
+        working-directory: source
+        run: rustup show active-toolchain
+      - name: Install Linux build and software graphics dependencies
+        if: matrix.kind == 'application' || matrix.kind == 'static'
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8
+        if: matrix.kind == 'application' || matrix.kind == 'core' || matrix.kind == 'static'
+        with:
+          tool: cargo-nextest@0.9.150
+      - name: Get the project's pinned reference test files
+        if: matrix.kind == 'core' || matrix.kind == 'goldens'
+        working-directory: source/solidcore
+        run: |
+          source scripts/upstream-pin.env
+          git init -q upstream
+          git -C upstream remote add origin "$UPSTREAM_REPO"
+          git -C upstream sparse-checkout set --no-cone '/TestFiles/pt_TestFiles/'
+          git -C upstream fetch --no-tags --filter=blob:none --depth 1 origin "$UPSTREAM_COMMIT"
+          git -C upstream checkout --detach "$UPSTREAM_COMMIT"
+          test "$(git -C upstream rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          test -s upstream/TestFiles/pt_TestFiles/Surface.sms
+          test -s upstream/TestFiles/pt_TestFiles/Solids/fillet_ts.smb
+          echo "SOLIDCORE_REQUIRE_UPSTREAM=1" >> "$GITHUB_ENV"
+      - name: Run the repository gate, with tests and goldens in the sibling jobs
+        if: matrix.kind == 'static'
+        working-directory: source
+        run: cargo xtask fast --base HEAD --no-tests
+      - name: Run both affected application packages, then apply the upstream JUnit grader
+        if: matrix.kind == 'application'
+        working-directory: source
+        run: |
+          status=0
+          cargo nextest run --locked --cargo-profile ci --profile ci --no-fail-fast -p solidcraft-kernel -p solidcraft-ui-egui -E 'not (binary(action_matrix) & test(=action_matrix_sample))' || status=$?
+          if [[ "$status" != 0 && "$status" != 100 ]]; then exit "$status"; fi
+          junit=target/nextest/ci/junit.xml
+          test -s "$junit"
+          cargo xtask known-failing --junit "$junit"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && matrix.kind == 'application'
+        with:
+          name: navigation-geometry-application-junit
+          path: source/target/nextest/ci/junit.xml
+          if-no-files-found: error
+          retention-days: 7
+      - name: Run the SolidCore package tests
+        if: matrix.kind == 'core'
+        working-directory: source/solidcore
+        run: >-
+          cargo nextest run --locked --cargo-profile goldens --no-fail-fast --partition hash:${{ matrix.part }}
+          -p diagnostics -p nurbs-grid-mesh -p solidcore -p solidcore-cadir -p solidcore-convert
+          -p solidcore-ops -p solidcore-record -p solidcore-ssi -p solidcore-step
+          -p solidcore-tess -p ssi -p step-export -p xtask
+      - name: Check all changed geometry units against the reference
+        if: matrix.kind == 'goldens'
+        working-directory: source/solidcore
+        run: cargo run --locked --profile goldens -p goldens -- --unit geom.geom_utility_p1 --unit query.api_queries --unit query.brep --goldens
+      - name: Build the native Windows app
+        if: matrix.kind == 'winbuild'
+        working-directory: source
+        env:
+          SOLIDCRAFT_VERSION: 0.45.0
+        run: cargo build --locked --profile ci -p solidcraft
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: matrix.kind == 'winbuild'
+        with:
+          name: solidcraft-windows-navigation-geometry
+          path: source/target/ci/solidcraft.exe
+          if-no-files-found: error
+          retention-days: 2
+      - name: Run the native navigation tests and device handover
+        if: matrix.kind == 'wintest'
+        working-directory: source
+        run: >-
+          cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation:: viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste another_device_starts_with_no_buttons_seen_and_no_settling
