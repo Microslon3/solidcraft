@@ -14,6 +14,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-24.04
+            check: Linux full gate
+          - os: ubuntu-24.04
+            check: Exact ray regressions
           - os: windows-latest
             check: Windows app and navigation
     env:
@@ -57,6 +61,32 @@ jobs:
       - name: Select the project's Rust toolchain
         working-directory: source
         run: rustup show active-toolchain
+      - name: Install Linux build and software graphics dependencies
+        if: matrix.check == 'Linux full gate'
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+          df -h .
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8
+        if: matrix.check == 'Linux full gate'
+        with:
+          tool: cargo-nextest@0.9.150
+      - name: Run the exact-ray kernel regressions
+        if: matrix.check == 'Exact ray regressions'
+        working-directory: source/solidcore
+        run: cargo test --locked --profile goldens -p solidcore --lib first_ray_interval
+      - name: Check that the conservative bounds leave repeated placements lazy
+        if: matrix.check == 'Linux full gate'
+        working-directory: source
+        run: cargo test --locked --profile ci -p solidcraft-kernel --lib conservative_source_bounds_keep_multiple_placements_lazy
+      - name: Exercise the orbit and middle-button regressions
+        if: matrix.check == 'Linux full gate'
+        working-directory: source
+        run: cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation::view_key_tests viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste
+      - name: Run the complete pre-commit gate and the query goldens
+        if: matrix.check == 'Linux full gate'
+        working-directory: source
+        run: cargo xtask fast --base HEAD --units query.api_queries,query.brep
       - name: Build the native Windows app for the orbit captures
         if: runner.os == 'Windows'
         working-directory: source

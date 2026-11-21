@@ -1,13 +1,165 @@
 diff --git a/crates/kernel/src/body.rs b/crates/kernel/src/body.rs
-index 685c0de06688cbbb2efa6c7728208652304eea10..0d5550af0521a845fc1dad49ecfb7c1bb06494e2 100644
+index 685c0de06688cbbb2efa6c7728208652304eea10..4a52f09bc11bfcbd6642fd35e8d78aa48d97a348 100644
 --- a/crates/kernel/src/body.rs
 +++ b/crates/kernel/src/body.rs
-@@ -1502,6 +1502,21 @@ impl Body {
+@@ -22,10 +22,43 @@ pub(crate) mod shell_groups;
+ /// a hundred times took tens of gigabytes. Reads as the record either way.
+ #[derive(Clone, Debug)]
+ pub(crate) enum RecordCell {
+-    Ready(std::sync::Arc<Brep>),
++    Ready(std::sync::Arc<SharedRecord>),
+     Moved(std::sync::Arc<LazyMove>),
+ }
+ 
++/// The immutable record and its conservative bounds, shared by its pending placements.
++/// A transformed record gets its own box even when the topology is unchanged.
++#[derive(Debug)]
++pub(crate) struct SharedRecord {
++    brep: std::sync::Arc<Brep>,
++    loose_bounds: std::sync::OnceLock<Aabb3>,
++}
++
++impl SharedRecord {
++    fn new(brep: std::sync::Arc<Brep>) -> Self {
++        Self { brep, loose_bounds: std::sync::OnceLock::new() }
++    }
++
++    fn loose_bounds(&self, prepared: Option<&solidcore_ops::Body>) -> Result<Aabb3> {
++        if let Some(bounds) = self.loose_bounds.get() {
++            return Ok(*bounds);
++        }
++        // Work outside the cell: a failed kernel conversion may invoke diagnostic callbacks.
++        // Only the box is kept when the geometry was not already prepared.
++        let (lo, hi) = match prepared {
++            Some(body) => body.loose_bounds(),
++            None => {
++                solidcraft_smlib::start();
++                let (body, _) = solidcraft_smlib::stop::unstoppable(|| solidcore_ops::Body::from_record(&self.brep, true))
++                    .map_err(|e| KernelError::smlib("body bounds", e))?;
++                body.loose_bounds()
++            }
++        }
++        .map_err(|e| KernelError::smlib("body bounds", e))?;
++        Ok(*self.loose_bounds.get_or_init(|| Aabb3 { min: v3(lo), max: v3(hi) }))
++    }
++}
++
+ /// How a record moves by a rigid motion ([`solidcraft_geom::brep::placement::moved`]).
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ pub(crate) enum Movable {
+@@ -60,25 +93,25 @@ pub(crate) struct Placing {
+ /// A record moved by a rigid motion when first read ([`RecordCell::Moved`]).
+ #[derive(Debug)]
+ pub(crate) struct LazyMove {
+-    source: std::sync::Arc<Brep>,
++    source: std::sync::Arc<SharedRecord>,
+     motion: solidcraft_geom::brep::placement::Rigid,
+     matrix: [[f64; 4]; 4],
+-    made: std::sync::OnceLock<std::sync::Arc<Brep>>,
++    made: std::sync::OnceLock<std::sync::Arc<SharedRecord>>,
+ }
+ 
+ impl LazyMove {
+-    pub(crate) fn new(source: std::sync::Arc<Brep>, motion: solidcraft_geom::brep::placement::Rigid, matrix: [[f64; 4]; 4]) -> LazyMove {
++    fn new(source: std::sync::Arc<SharedRecord>, motion: solidcraft_geom::brep::placement::Rigid, matrix: [[f64; 4]; 4]) -> LazyMove {
+         LazyMove { source, motion, matrix, made: std::sync::OnceLock::new() }
+     }
+ 
+-    fn record(&self) -> &std::sync::Arc<Brep> {
++    fn record(&self) -> &std::sync::Arc<SharedRecord> {
+         self.made.get_or_init(|| {
+             // The record was checked to move exactly before it was placed this way; should that
+             // fail after all, it is mapped, and as a last resort kept where it is (logged).
+-            let moved = solidcraft_geom::brep::placement::moved(&self.source, &self.motion)
+-                .or_else(|| solidcraft_geom::brep::placement::mapped(&self.source, &self.matrix));
++            let moved = solidcraft_geom::brep::placement::moved(self.source(), &self.motion)
++                .or_else(|| solidcraft_geom::brep::placement::mapped(self.source(), &self.matrix));
+             match moved {
+-                Some(r) => std::sync::Arc::new(r),
++                Some(r) => std::sync::Arc::new(SharedRecord::new(std::sync::Arc::new(r))),
+                 None => {
+                     log::error!("a lazily placed record could not be moved; it is drawn where its part is");
+                     self.source.clone()
+@@ -90,13 +123,17 @@ impl LazyMove {
+     /// The record it moves (the part's), for what a rigid motion leaves as it is: its topology,
+     /// its counts, its size.
+     pub(crate) fn source(&self) -> &std::sync::Arc<Brep> {
+-        &self.source
++        &self.source.brep
+     }
+ }
+ 
+ impl RecordCell {
+     /// The record as an `Arc` (moved first, when it is moved lazily).
+     pub(crate) fn arc(&self) -> &std::sync::Arc<Brep> {
++        &self.resolved().brep
++    }
++
++    fn resolved(&self) -> &std::sync::Arc<SharedRecord> {
+         match self {
+             RecordCell::Ready(r) => r,
+             RecordCell::Moved(m) => m.record(),
+@@ -108,7 +145,7 @@ impl RecordCell {
+     /// the same; positions are not.
+     pub(crate) fn topology(&self) -> &Brep {
+         match self {
+-            RecordCell::Ready(r) => r,
++            RecordCell::Ready(r) => &r.brep,
+             RecordCell::Moved(m) => m.source(),
+         }
+     }
+@@ -117,12 +154,12 @@ impl RecordCell {
+     /// decided without moving either.
+     pub(crate) fn same(&self, other: &RecordCell) -> bool {
+         match (self, other) {
+-            (RecordCell::Ready(a), RecordCell::Ready(b)) => std::sync::Arc::ptr_eq(a, b),
++            (RecordCell::Ready(a), RecordCell::Ready(b)) => std::sync::Arc::ptr_eq(&a.brep, &b.brep),
+             (RecordCell::Moved(a), RecordCell::Moved(b)) => {
+-                std::sync::Arc::ptr_eq(a, b) || (std::sync::Arc::ptr_eq(&a.source, &b.source) && a.motion == b.motion)
++                std::sync::Arc::ptr_eq(a, b) || (std::sync::Arc::ptr_eq(a.source(), b.source()) && a.motion == b.motion)
+             }
+             (RecordCell::Moved(m), RecordCell::Ready(r)) | (RecordCell::Ready(r), RecordCell::Moved(m)) => {
+-                m.made.get().is_some_and(|made| std::sync::Arc::ptr_eq(made, r))
++                m.made.get().is_some_and(|made| std::sync::Arc::ptr_eq(&made.brep, &r.brep))
+             }
+         }
+     }
+@@ -130,7 +167,7 @@ impl RecordCell {
+     /// An address naming the record while it lives, without moving it.
+     pub(crate) fn key(&self) -> usize {
+         match self {
+-            RecordCell::Ready(r) => std::sync::Arc::as_ptr(r) as usize,
++            RecordCell::Ready(r) => std::sync::Arc::as_ptr(&r.brep) as usize,
+             RecordCell::Moved(m) => std::sync::Arc::as_ptr(m) as *const u8 as usize,
+         }
+     }
+@@ -158,7 +195,7 @@ impl std::ops::Deref for RecordCell {
+ 
+ impl From<std::sync::Arc<Brep>> for RecordCell {
+     fn from(r: std::sync::Arc<Brep>) -> RecordCell {
+-        RecordCell::Ready(r)
++        RecordCell::Ready(std::sync::Arc::new(SharedRecord::new(r)))
+     }
+ }
+ 
+@@ -1373,8 +1410,8 @@ impl Body {
+             None => None,
+         };
+         let (source, matrix) = match self.record.lazy().filter(|_| self.record.pending()) {
+-            Some(inner) => (inner.source().clone(), solidcore_ops::affine::then(&inner.matrix, &matrix).ok()?),
+-            None => (self.record.arc().clone(), matrix),
++            Some(inner) => (inner.source.clone(), solidcore_ops::affine::then(&inner.matrix, &matrix).ok()?),
++            None => (self.record.resolved().clone(), matrix),
+         };
+         let motion = solidcraft_geom::brep::placement::Rigid::of_matrix(&matrix).filter(|m| movable.by(m))?;
+         Some(Body {
+@@ -1502,6 +1539,26 @@ impl Body {
          record_outline(&self.record)
      }
  
 +    /// A box enclosing the body's exact faces, edges and vertices, using the kernel's
-+    /// non-tight bounds. A mesh body's box comes from its triangles.
++    /// non-tight bounds. A pending placement moves the corners of its shared source box.
++    /// A mesh body's box comes from its triangles.
 +    pub fn loose_bounds(&self) -> Result<Aabb3> {
 +        if self.is_mesh() {
 +            return Ok(self.outline_bounds());
@@ -15,16 +167,20 @@ index 685c0de06688cbbb2efa6c7728208652304eea10..0d5550af0521a845fc1dad49ecfb7c1b
 +        if let Some(bounds) = *self.bounds.lock().unwrap_or_else(std::sync::PoisonError::into_inner) {
 +            return Ok(bounds);
 +        }
-+        let form = self.ops_body().ok_or_else(|| KernelError::Failed("body bounds: the body has no solidcore form".into()))?;
-+        let (body, _) = &*form;
-+        let (lo, hi) = body.loose_bounds().map_err(|e| KernelError::smlib("body bounds", e))?;
-+        Ok(Aabb3 { min: v3(lo), max: v3(hi) })
++        if let Some(lazy) = self.record.lazy().filter(|_| self.record.pending()) {
++            let bounds = lazy.source.loose_bounds(None)?;
++            let (lo, hi) = solidcore_ops::affine::moved_box(&lazy.matrix, bounds.min.into(), bounds.max.into())
++                .map_err(|e| KernelError::smlib("placed body bounds", e))?;
++            return Ok(Aabb3 { min: v3(lo), max: v3(hi) });
++        }
++        let prepared = self.ops.get();
++        self.record.resolved().loose_bounds(prepared.as_deref().map(|(body, _)| body))
 +    }
 +
      /// The exact box of the body's faces, edges and vertices (SMLib's tight box); a mesh body's
      /// is its triangles'. Measured once per record: a boolean asks for the box of every body it
      /// meets, and the same bodies come back feature after feature. A failure is not kept.
-@@ -2114,6 +2129,14 @@ impl Body {
+@@ -2114,6 +2171,14 @@ impl Body {
          Ok(Some(RayPick { face, edge, vertex, point, normal, depth: hit.distance }))
      }
  
@@ -39,8 +195,53 @@ index 685c0de06688cbbb2efa6c7728208652304eea10..0d5550af0521a845fc1dad49ecfb7c1b
      /// B-rep faces (a mesh body is one face; [`crate::measure`] counts its triangles).
      pub fn face_count(&self) -> usize {
          if self.mesh.is_some() { 1 } else { self.record.topology().faces.len() }
+diff --git a/crates/kernel/src/placement_tests.rs b/crates/kernel/src/placement_tests.rs
+index e2055e48b7509dd33f07dbbcf55bfc5c148e964f..a34cfe6f63ea8a992e7749ffd0b09987d132707e 100644
+--- a/crates/kernel/src/placement_tests.rs
++++ b/crates/kernel/src/placement_tests.rs
+@@ -267,6 +267,40 @@ fn a_rounded_body_moves_exactly_as_the_kernel_moves_it() {
+     assert!(kinds.contains(&"exact") && kinds.contains(&"procedural"), "{kinds:?}");
+ }
+ 
++#[test]
++fn conservative_source_bounds_keep_multiple_placements_lazy() {
++    let part = periodic_cylinder();
++    let (c, s) = (0.6_f64.cos(), 0.6_f64.sin());
++    let turn = [[1.0, 0.0, 0.0, 0.0], [0.0, c, s, 0.0], [0.0, -s, c, 0.0], [50.0, -20.0, 5.0, 1.0]];
++    let shift = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [200.0, 40.0, -12.0, 1.0]];
++    let both = solidcore_ops::affine::then(&turn, &shift).unwrap();
++    let placed = transform_matrix(&part, turn).unwrap();
++    let elsewhere = transform_matrix(&part, shift).unwrap();
++    let nested = transform_matrix(&placed, shift).unwrap();
++    let check = |body: &Body, matrix| {
++        assert!(body.record.pending());
++        let bounds = body.loose_bounds().unwrap();
++        // The cylinder has radius 10 and spans Z=0..20 in the shared source.
++        for z in [0.0, 20.0] {
++            for [x, y] in [[10.0, 0.0], [-10.0, 0.0], [0.0, 10.0], [0.0, -10.0]] {
++                let point = moved(matrix, [x, y, z]);
++                assert!(bounds.inflated(1e-8).contains(point), "{point:?} outside {bounds:?}");
++            }
++        }
++        assert!(body.record.pending(), "broad-phase bounds must not materialize a placement");
++    };
++    check(&placed, turn);
++    check(&elsewhere, shift);
++    check(&nested, both);
++
++    // A materialized occurrence can be the source of another placement. It shares the
++    // original's topology but its record and bounds are now in a different frame.
++    let _ = placed.record();
++    let moved_again = transform_matrix(&placed, shift).unwrap();
++    check(&moved_again, both);
++    assert!(elsewhere.record.pending() && nested.record.pending());
++}
++
+ /// A body placed by a rigid motion keeps its part's record until its own geometry is read: its
+ /// counts, history and face sources come from the part's, and nothing is moved for them. Read,
+ /// its record is the one an eager move makes. Placed again (a part in a placed subassembly), it
 diff --git a/crates/ui-egui/src/navigation.rs b/crates/ui-egui/src/navigation.rs
-index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aaabd83334 100644
+index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..a7d6ec3f3f2ceaee62de787d143460dbbd1721ef 100644
 --- a/crates/ui-egui/src/navigation.rs
 +++ b/crates/ui-egui/src/navigation.rs
 @@ -20,7 +20,7 @@ use solidcraft_viewport::Camera;
@@ -52,7 +253,64 @@ index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aa
  
  /// What a page's camera may do.
  #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-@@ -1373,32 +1373,39 @@ pub(crate) fn device(app: &mut SolveApp, rect: Rect, caps: NavCaps) {
+@@ -333,8 +333,8 @@ pub(crate) fn claims_scroll(modifiers: egui::Modifiers, zoom_modifier: Option<eg
+     zoom_modifier.is_some_and(|chosen| modifiers.matches_exact(chosen) && !(modifiers.mac_cmd && modifiers.ctrl))
+ }
+ 
+-/// How long a twist may pause, in seconds, before it has ended and its cursor pivot is let go.
+-const TWIST_PAUSE: f64 = 0.25;
++/// A pause in a device bridge orbit or a trackpad twist ends the gesture and releases its pivot.
++const UNBRACKETED_ORBIT_PAUSE: f64 = 0.25;
+ 
+ /// The trackpad's two-finger rotation this frame in radians, counter-clockwise positive (egui's
+ /// `Event::Rotate` counts clockwise). Events that carry a non-finite angle are ignored.
+@@ -1002,7 +1002,7 @@ fn handle_input(app: &mut SolveApp, ui: &mut egui::Ui, rect: Rect, resp: &egui::
+     // That is checked before this frame's rotation: an idle window draws no frames in between, so
+     // the first rotation of a new twist must not turn about the last twist's point.
+     let (twist, now, pressed) = ui.input(|i| (twist_radians(i), i.time, i.pointer.any_pressed()));
+-    if pressed || app.viewport.twist_last.is_none_or(|last| now - last > TWIST_PAUSE) {
++    if pressed || app.viewport.twist_last.is_none_or(|last| now - last > UNBRACKETED_ORBIT_PAUSE) {
+         app.viewport.twist_pivot = None;
+         app.viewport.twist_last = None;
+     }
+@@ -1344,6 +1344,28 @@ fn unwrapped_delta(app: &mut SolveApp, delta: egui::Vec2) -> egui::Vec2 {
+     }
+ }
+ 
++#[derive(Clone, Copy, PartialEq, Eq)]
++enum OrbitDevice {
++    Cap,
++    Bridge,
++}
++
++/// The depth chosen for a run of pure Classic turns. Mixed motion resolves its own depth.
++pub(crate) struct DeviceCentreOrbit {
++    device: OrbitDevice,
++    pivot: Option<Vec3>,
++    camera: Camera,
++    rect: Rect,
++    scene: u64,
++    last_packet: f64,
++}
++
++pub(crate) fn release_cap_centre_orbit(app: &mut SolveApp) {
++    if app.viewport.device_centre_orbit.as_ref().is_some_and(|held| held.device == OrbitDevice::Cap) {
++        app.viewport.device_centre_orbit = None;
++    }
++}
++
+ /// The 3D mouse's motion this frame (#1336), on a page `rect` whose camera may do `caps`: the cap
+ /// pans and zooms every page, and turns the view where the page may orbit. In a sketch, turning
+ /// stays off while the camera is in its initial sketch orientation, unless the user lets the 3D
+@@ -1353,6 +1375,7 @@ fn unwrapped_delta(app: &mut SolveApp, delta: egui::Vec2) -> egui::Vec2 {
+ pub(crate) fn device(app: &mut SolveApp, rect: Rect, caps: NavCaps) {
+     let rect = crate::render_workspace::camera_rect(app, rect);
+     if app.viewport.device_motion.is_none() && app.viewport.bridge_motion.is_none() {
++        release_cap_centre_orbit(app);
+         return;
+     }
+     let sketch_turns = app.preferences.space_mouse_sketch_orbit;
+@@ -1373,36 +1396,70 @@ pub(crate) fn device(app: &mut SolveApp, rect: Rect, caps: NavCaps) {
      // Off by default: the cap and bridge can pass through the model, as before. The wheel and
      // pinch keep their separate "Zoom to the cursor" preference.
      let anchor = model_zoom_anchor(app, rect, Some(rect.center()), caps.orbit);
@@ -80,15 +338,37 @@ index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aa
                  p
              }
 -        }
--    });
 +        })
 +    } else {
 +        None
 +    };
-+    let centre_pivot = |app: &SolveApp| {
++    let choose_centre = |app: &SolveApp| {
 +        let proj = projection(app, rect);
 +        view_pivot_at(app, &proj, proj.rect.center())
 +    };
++    // Angle locks can alter the final orientation after the pivot was held in place.
++    let holds = classic && !["yaw", "pitch", "roll"].into_iter().any(|axis| crate::view_angles::locked_angle(app, axis));
++    let pure_turn = match (app.viewport.device_motion, app.viewport.bridge_motion) {
++        (Some(cap), None) if holds && cap_turns && cap.motion.translation == [0.0; 3] => Some(OrbitDevice::Cap),
++        (None, Some(bridge)) if holds && bridge.orbit != [0.0; 2] && bridge.pan == [0.0; 2] && bridge.zoom == 0.0 => Some(OrbitDevice::Bridge),
++        _ => None,
++    };
++    let previous = app.viewport.device_centre_orbit.take();
++    let mut held = pure_turn.map(|device| {
++        let camera = Camera { fov: app.view_fov(), ..app.cam };
++        let scene = crate::view_pick::orbit_scene_key(app);
++        let reused = previous.filter(|last| {
++            last.device == device
++                && last.camera == camera
++                && last.rect == rect
++                && last.scene == scene
++                // The cap signals rest. Bridge packets have no end event, as with trackpad twists.
++                && (device == OrbitDevice::Cap || (0.0..=UNBRACKETED_ORBIT_PAUSE).contains(&(app.now - last.last_packet)))
++        });
++        let pivot = reused.map_or_else(|| choose_centre(app), |last| last.pivot);
++        DeviceCentreOrbit { device, pivot, camera, rect, scene, last_packet: app.now }
+     });
++    let centre_pivot = |app: &SolveApp| held.as_ref().map_or_else(|| choose_centre(app), |turn| turn.pivot);
      if let Some(queued) = app.viewport.device_motion.take() {
          let before = app.cam;
 +        let pivot = if classic && cap_turns { centre_pivot(app).map(DeviceOrbitPivot::ViewDepth) } else { traced.map(DeviceOrbitPivot::Point) };
@@ -104,7 +384,15 @@ index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aa
          let (reverse, free, fov) = (app.preferences.zoom_reverse, app.preferences.free_orbit, app.view_fov());
          with_fov(&mut app.cam, fov, |cam| bridge_camera(cam, queued, height, turn, reverse, free, anchor, pivot));
          app.cam = crate::view_angles::keep_locked(app, before, app.cam);
-@@ -1451,11 +1458,18 @@ pub(crate) fn bridge_camera(
+     }
++    if let Some(held) = &mut held {
++        held.camera = Camera { fov: app.view_fov(), ..app.cam };
++    }
++    app.viewport.device_centre_orbit = held;
+ }
+ 
+ /// How far one zoom step of a device app (a click of its ring or wheel) moves the camera: this
+@@ -1451,11 +1508,18 @@ pub(crate) fn bridge_camera(
      }
  }
  
@@ -124,7 +412,7 @@ index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aa
  /// Reverse zoom direction is a wheel setting and leaves the cap alone: the cap's own direction is
  /// its per-axis invert, already in `motion` (#8993).
  pub(crate) fn device_camera(
-@@ -1466,7 +1480,7 @@ pub(crate) fn device_camera(
+@@ -1466,7 +1530,7 @@ pub(crate) fn device_camera(
      turn: bool,
      free_orbit: bool,
      anchor: Option<Vec3>,
@@ -133,7 +421,7 @@ index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aa
  ) {
      if !(seconds > 0.0) || !seconds.is_finite() {
          return;
-@@ -1481,7 +1495,17 @@ pub(crate) fn device_camera(
+@@ -1481,7 +1545,17 @@ pub(crate) fn device_camera(
          // These are logical 3DxWare coordinates after the profile mapping: Rx is Tilt, Ry is
          // Roll and Rz is Spin. The KMJ profile swaps physical Ry/Rz for the selected navigation
          // mode, so swapping them again here would make Roll behave like Spin.
@@ -152,7 +440,7 @@ index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aa
          if free_orbit {
              cam.rotate_in_view(Vec3::new(-rx, -ry, rz) * (2.0 * seconds));
          } else {
-@@ -1762,32 +1786,43 @@ fn screen_middle(app: &SolveApp, mut cam: Camera, bounds: &solidcraft_engine::ge
+@@ -1762,32 +1836,43 @@ fn screen_middle(app: &SolveApp, mut cam: Camera, bounds: &solidcraft_engine::ge
      at.is_finite().then_some(at)
  }
  
@@ -212,7 +500,7 @@ index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aa
  }
  
  /// An orbit drag so far: the camera it began with, its total turn since (the pointer's motion,
-@@ -4690,6 +4725,205 @@ mod view_key_tests {
+@@ -4690,6 +4775,266 @@ mod view_key_tests {
          }
      }
  
@@ -383,6 +671,67 @@ index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aa
 +    }
 +
 +    #[test]
++    fn classic_device_holds_the_pivot_during_a_pure_turn_and_reselects_it_after_changes() {
++        use super::*;
++        use crate::space_mouse::DeviceMotion;
++        for cap in [true, false] {
++            let mut h = Harness::new();
++            h.app.home.open = false;
++            h.app.ui.perspective = false;
++            h.app.preferences.space_mouse_model_pivot = false;
++            h.app.preferences.free_orbit = false;
++            h.app.preferences.zoom_stop_at_model = false;
++            h.app.run("solid.box", json!({"length": 40, "width": 40, "height": 40, "corner": [-20, -20, -20], "body_name": "Box"})).unwrap();
++            h.settle();
++            let rect = h.app.viewport.rect.expect("the viewport");
++            h.app.cam = Camera { target: Vec3::new(15.0, 5000.0, 0.0), yaw: 0.0, pitch: 0.0, ..Camera::default() };
++            let choose = |app: &SolveApp| {
++                let proj = projection(app, rect);
++                view_pivot_at(app, &proj, rect.center())
++            };
++            let original = choose(&h.app).expect("the off-centre ray crosses the box");
++            let turn = |app: &mut SolveApp, pan: bool| {
++                if cap {
++                    let translation = if pan { [0.5, 0.0, 0.0] } else { [0.0; 3] };
++                    app.viewport.device_motion = Some(DeviceMotion { motion: Motion { translation, rotation: [0.0, 1.0, 0.0] }, seconds: 0.05 });
++                } else {
++                    let pan = if pan { [4.0, 0.0] } else { [0.0; 2] };
++                    app.viewport.bridge_motion = Some(BridgeMotion { orbit: [12.5, 0.0], pan, ..Default::default() });
++                }
++                device(app, rect, NavCaps::MODEL);
++            };
++            for _ in 0..8 {
++                turn(&mut h.app, false);
++                assert_eq!(h.app.viewport.device_centre_orbit.as_ref().and_then(|held| held.pivot), Some(original));
++                let screen = projection(&h.app, rect).to_screen(original).expect("the held pivot projects");
++                assert!(screen.distance(rect.center()) < 0.1, "{screen:?}");
++            }
++            let from_new_angle = choose(&h.app).expect("the turned ray still crosses the box");
++            assert!(from_new_angle.dist(original) > 1.0, "the changed chord would have moved the pivot");
++            if cap {
++                device(&mut h.app, rect, NavCaps::MODEL);
++            } else {
++                h.app.now += UNBRACKETED_ORBIT_PAUSE + 0.01;
++            }
++            turn(&mut h.app, false);
++            assert_eq!(h.app.viewport.device_centre_orbit.as_ref().and_then(|held| held.pivot), Some(from_new_angle));
++
++            h.app.cam.pan(4.0, 0.0, f64::from(rect.height()));
++            let after_pan = choose(&h.app);
++            assert_ne!(after_pan, Some(from_new_angle));
++            turn(&mut h.app, false);
++            assert_eq!(h.app.viewport.device_centre_orbit.as_ref().and_then(|held| held.pivot), after_pan);
++
++            // A changed scene and mixed device motion both invalidate the held point.
++            h.app.session.visibility.hidden_bodies.push("Box".into());
++            turn(&mut h.app, false);
++            assert!(h.app.viewport.device_centre_orbit.as_ref().expect("a pure turn").pivot.is_none());
++            turn(&mut h.app, true);
++            assert!(h.app.viewport.device_centre_orbit.is_none());
++        }
++    }
++
++    #[test]
 +    fn classic_device_orbit_uses_the_centre_after_pan_and_zoom() {
 +        use super::*;
 +        use crate::space_mouse::DeviceMotion;
@@ -418,14 +767,47 @@ index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aa
      /// #16628: in perspective, zooming in never collapses the eye onto the target, and the target stays
      /// near the model, for a run of wheel steps at the centre and for a seeded mix of orbit, scroll and pinch.
      #[test]
+diff --git a/crates/ui-egui/src/space_mouse.rs b/crates/ui-egui/src/space_mouse.rs
+index 65f866697298794e1a8814fc2f8076ef829927eb..2ec7c09decd4b5640bdbbc127444d02899b4acc5 100644
+--- a/crates/ui-egui/src/space_mouse.rs
++++ b/crates/ui-egui/src/space_mouse.rs
+@@ -585,6 +585,7 @@ pub fn navigate_frame(app: &mut SolveApp, ctx: &egui::Context, mapping: DriverMa
+     // Back at rest: the next push picks what the view turns around afresh.
+     if !axes.moving() {
+         app.viewport.device_pivot = None;
++        crate::navigation::release_cap_centre_orbit(app);
+     }
+     // Only the window with focus: with two windows open, the cap moves the one being used, not both.
+     if !app.preferences.space_mouse_enabled || app.home.open || app.file_picker_busy() || !axes.moving() || !ctx.input(|i| i.focused) {
 diff --git a/crates/ui-egui/src/view_pick.rs b/crates/ui-egui/src/view_pick.rs
-index 21a44e7afe2d3e2942bbcae1b0c786066d18a865..23bd987e5aba90910af764efb1eeb0e9475f1bce 100644
+index 21a44e7afe2d3e2942bbcae1b0c786066d18a865..c2280b10e21b38243a2edfd4bee47acb72d4f4b5 100644
 --- a/crates/ui-egui/src/view_pick.rs
 +++ b/crates/ui-egui/src/view_pick.rs
-@@ -268,6 +268,94 @@ fn face_candidates(
+@@ -268,6 +268,115 @@ fn face_candidates(
      out
  }
  
++/// What the orbit ray can meet. Independent of camera movement and display refinement.
++pub(crate) fn orbit_scene_key(app: &SolveApp) -> u64 {
++    use std::hash::{Hash, Hasher};
++
++    let mut h = std::collections::hash_map::DefaultHasher::new();
++    let s = &app.session;
++    s.revision.hash(&mut h);
++    std::sync::Arc::as_ptr(&crate::open_meshing::shown_world(app)).hash(&mut h);
++    s.visibility.hidden_bodies.hash(&mut h);
++    s.visibility.hidden_occurrences.hash(&mut h);
++    s.visibility.hidden_folders.hash(&mut h);
++    s.active_sketch.hash(&mut h);
++    app.dialog.as_ref().map(|d| &d.edit_source_bodies).hash(&mut h);
++    app.preview.effective_replaced().hash(&mut h);
++    crate::viewport::frame_ghosting(app).hash(&mut h);
++    for plane in crate::viewport::section_planes(app) {
++        [plane.origin.x, plane.origin.y, plane.origin.z, plane.normal.x, plane.normal.y, plane.normal.z].map(f64::to_bits).hash(&mut h);
++    }
++    h.finish()
++}
++
 +/// The orbit's window ray and its first visible material interval (distances from the origin).
 +/// The orthographic ray starts in front of the conservative bounds, including any curved
 +/// surface that reaches past the display mesh.
@@ -517,7 +899,7 @@ index 21a44e7afe2d3e2942bbcae1b0c786066d18a865..23bd987e5aba90910af764efb1eeb0e9
  /// The hit point and outward surface normal in world space. A flat face (constant mesh
  /// normals) is solved exactly against its plane, so a box picks to the last digit; a curved
  /// face keeps the mesh hit (within the display tolerance) and takes its normal interpolated
-@@ -330,6 +418,12 @@ pub(crate) fn section_keeps(planes: &[SectionPlane], p: Vec3) -> bool {
+@@ -330,6 +439,12 @@ pub(crate) fn section_keeps(planes: &[SectionPlane], p: Vec3) -> bool {
  /// Where the ray `o + d·t` comes into what the section keeps (inside every plane) ahead of `o`:
  /// `t` and the index of the plane it comes in through, where its cut face is.
  pub(crate) fn section_entry(planes: &[SectionPlane], o: Vec3, d: Vec3) -> Option<(f64, usize)> {
@@ -530,7 +912,7 @@ index 21a44e7afe2d3e2942bbcae1b0c786066d18a865..23bd987e5aba90910af764efb1eeb0e9
      let (mut lo, mut hi, mut through) = (f64::NEG_INFINITY, f64::INFINITY, None);
      for (i, c) in planes.iter().enumerate() {
          // n·(o + d·t) <= n·origin: t·dn <= s.
-@@ -344,8 +438,7 @@ pub(crate) fn section_entry(planes: &[SectionPlane], o: Vec3, d: Vec3) -> Option
+@@ -344,8 +459,7 @@ pub(crate) fn section_entry(planes: &[SectionPlane], o: Vec3, d: Vec3) -> Option
              (lo, through) = (s / dn, Some(i));
          }
      }
@@ -541,7 +923,7 @@ index 21a44e7afe2d3e2942bbcae1b0c786066d18a865..23bd987e5aba90910af764efb1eeb0e9
  
  /// A cut cap under a pick: where, in which body, and the plane it is a cut face of.
 diff --git a/crates/ui-egui/src/viewport.rs b/crates/ui-egui/src/viewport.rs
-index abcdac12d943539b8c6103638c7ec2a057501490..7338e93358f411b3468c9cb9ccc549d56cbb0026 100644
+index abcdac12d943539b8c6103638c7ec2a057501490..f9798208433952532b09dd95610e06705e80f5a1 100644
 --- a/crates/ui-egui/src/viewport.rs
 +++ b/crates/ui-egui/src/viewport.rs
 @@ -178,6 +178,8 @@ pub struct ViewportState {
@@ -553,7 +935,16 @@ index abcdac12d943539b8c6103638c7ec2a057501490..7338e93358f411b3468c9cb9ccc549d5
      /// What the refinement reads of each body of one world state that does not change with the
      /// view ([`lod_bodies`]), held with the state as `pick_bounds` is.
      lod_bodies: std::sync::Mutex<Option<(std::sync::Arc<solidcraft_engine::doc::ModelState>, std::sync::Arc<LodBodies>)>>,
-@@ -4050,6 +4052,7 @@ fn known_body_bounds(app: &SolveApp, st: &std::sync::Arc<solidcraft_engine::doc:
+@@ -425,6 +427,8 @@ pub struct ViewportState {
+     /// The model point the 3D mouse turns the view around: chosen when the cap leaves rest and
+     /// kept until it comes back (`navigation::device`, `space_mouse::navigate_frame`).
+     pub device_pivot: Option<Vec3>,
++    /// The Classic centre depth held during one run of pure device turns.
++    pub(crate) device_centre_orbit: Option<crate::navigation::DeviceCentreOrbit>,
+     /// After immediate zoom, ignore egui's outstanding smoothing until the gesture ends.
+     pub(crate) wheel_zoom_raw_until_idle: bool,
+     /// While trackpad scrolling runs, ignore egui's smoothing tail for zoom so
+@@ -4050,6 +4054,7 @@ fn known_body_bounds(app: &SolveApp, st: &std::sync::Arc<solidcraft_engine::doc:
  type BodyBounds = (std::sync::Arc<solidcraft_engine::doc::ModelState>, BodyBoxes);
  
  type BodyBoxes = std::sync::Arc<Vec<(String, solidcraft_engine::geom::Aabb3)>>;
@@ -561,7 +952,7 @@ index abcdac12d943539b8c6103638c7ec2a057501490..7338e93358f411b3468c9cb9ccc549d5
  
  /// The bodies' boxes of one world state taken together: the box around them all, and a
  /// hierarchy over them for rays. Every frame asks for the model's extent several times and casts
-@@ -4106,6 +4109,38 @@ pub(crate) fn body_tree(app: &SolveApp, boxes: &BodyBoxes) -> std::sync::Arc<Bod
+@@ -4106,6 +4111,38 @@ pub(crate) fn body_tree(app: &SolveApp, boxes: &BodyBoxes) -> std::sync::Arc<Bod
      std::sync::Arc::new(BodyTree::new(boxes))
  }
  
@@ -687,7 +1078,7 @@ index f61e84c3ff3ef195562d02f71590b8430757ba3c..a5f7cd4d8f9bb4d400d4c33514a1d340
      objects: &dyn TopologyObjects<O>,
      target: O,
 diff --git a/solidcore/crates/solidcore/src/query/brep.rs b/solidcore/crates/solidcore/src/query/brep.rs
-index d8ca3579ced067fdbcced0d110071ad238228619..413a9a484b9c5ee8d6d58aeca77a43b4691605e0 100644
+index d8ca3579ced067fdbcced0d110071ad238228619..c9bcc19d3546b9fb48e596171cf2a6c0c348e83f 100644
 --- a/solidcore/crates/solidcore/src/query/brep.rs
 +++ b/solidcore/crates/solidcore/src/query/brep.rs
 @@ -92,20 +92,24 @@ pub use ray::{
@@ -697,8 +1088,9 @@ index d8ca3579ced067fdbcced0d110071ad238228619..413a9a484b9c5ee8d6d58aeca77a43b4
 +use crate::curve::curve::Curve;
 +use crate::curve::line::Line;
  use crate::error::{native_failure, EntityRef, Result, SolidError};
- use crate::geom::attribute::{Attribute, AttributeValue, Behavior};
+-use crate::geom::attribute::{Attribute, AttributeValue, Behavior};
 -use crate::geom::extent3d::Extent3d;
++use crate::geom::attribute::{Attribute, AttributeValue, Behavior, ObjectKey};
 +use crate::geom::extent3d::{Extent3d, LineHit};
  use crate::geom::global_solver::{SolutionRequested, SolverOperation};
  use crate::geom::object::ObjectRef;
@@ -717,6 +1109,15 @@ index d8ca3579ced067fdbcced0d110071ad238228619..413a9a484b9c5ee8d6d58aeca77a43b4
  use crate::query::edge as qe;
  use crate::query::face::{p1 as qf1, p3 as qf3};
  use crate::surface::surface::Surface;
+@@ -452,7 +456,7 @@ impl<'a> ProvenBrepIdentity<'a> {
+                     .edges()
+                     .get(e)
+                     .and_then(|edge| edge.curve.as_ref())
+-                    .and_then(crate::curve::curve::p2::Curve::owner)
++                    .and_then(Curve::owner)
+                     .is_some_and(|actual| actual == base_keys(CacheObject::Edge(e))),
+                 EntityRef::Face(f) => b
+                     .faces()
 @@ -806,6 +810,112 @@ impl<'a> BrepQuery<'a> {
          }))
      }
