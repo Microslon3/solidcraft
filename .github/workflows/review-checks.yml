@@ -17,6 +17,8 @@ jobs:
           - os: ubuntu-24.04
             check: Linux full gate
           - os: ubuntu-24.04
+            check: Navigation inputs
+          - os: ubuntu-24.04
             check: Exact ray regressions
           - os: windows-latest
             check: Windows app and navigation
@@ -62,7 +64,7 @@ jobs:
         working-directory: source
         run: rustup show active-toolchain
       - name: Install Linux build and software graphics dependencies
-        if: matrix.check == 'Linux full gate'
+        if: matrix.check == 'Linux full gate' || matrix.check == 'Navigation inputs'
         run: |
           sudo apt-get -qq update
           sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
@@ -83,6 +85,11 @@ jobs:
         if: matrix.check == 'Linux full gate'
         working-directory: source
         run: cargo xtask fast --base HEAD --units query.api_queries,query.brep
+      - name: Exercise navigation, the middle button and changing the physical device
+        if: matrix.check == 'Navigation inputs'
+        working-directory: source
+        run: >-
+          cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation::view_key_tests viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste another_device_starts_with_no_buttons_seen_and_no_settling
       - name: Build the native Windows app for the orbit captures
         if: runner.os == 'Windows'
         working-directory: source

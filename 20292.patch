@@ -195,6 +195,26 @@ index 685c0de06688cbbb2efa6c7728208652304eea10..4a52f09bc11bfcbd6642fd35e8d78aa4
      /// B-rep faces (a mesh body is one face; [`crate::measure`] counts its triangles).
      pub fn face_count(&self) -> usize {
          if self.mesh.is_some() { 1 } else { self.record.topology().faces.len() }
+diff --git a/crates/kernel/src/lib.rs b/crates/kernel/src/lib.rs
+index ec8c4f9bb9541ad799570a79466be3982469443a..cb27754412cc97d3f8db4736dcf9a96c7b5a8b75 100644
+--- a/crates/kernel/src/lib.rs
++++ b/crates/kernel/src/lib.rs
+@@ -328,6 +328,15 @@ impl Cause for solidcraft_smlib::Error {
+     }
+ }
+ 
++impl Cause for solidcore_ops::Error {
++    fn panic(&self) -> Option<&str> {
++        match self {
++            solidcore_ops::Error::Internal(message) => Some(message),
++            _ => None,
++        }
++    }
++}
++
+ impl Cause for str {}
+ impl Cause for String {}
+ impl Cause for solidcraft_smlib::CheckReport {}
 diff --git a/crates/kernel/src/placement_tests.rs b/crates/kernel/src/placement_tests.rs
 index e2055e48b7509dd33f07dbbcf55bfc5c148e964f..c77f1891658bdba8703267995c192cdc2a07f614 100644
 --- a/crates/kernel/src/placement_tests.rs
