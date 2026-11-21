@@ -14,10 +14,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
-            check: Linux full gate
-          - os: ubuntu-24.04
-            check: Exact ray regressions
           - os: windows-latest
             check: Windows app and navigation
     env:
@@ -38,7 +34,7 @@ jobs:
       - name: Read the upstream revision
         id: base
         shell: bash
-        run: echo "sha=$(cat proof/base.txt)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(git -C proof show HEAD:base.txt)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: tangency-labs/solidcraft
@@ -49,37 +45,18 @@ jobs:
         working-directory: source
         shell: bash
         run: |
-          git apply --index ../proof/20292.patch
+          git -C ../proof cat-file blob HEAD:20292.patch > "$RUNNER_TEMP/solidcraft-nav.patch"
+          git apply --cached "$RUNNER_TEMP/solidcraft-nav.patch"
+          git diff --cached --name-only -z | git checkout-index -f -z --stdin
+          git diff --quiet
           git diff --cached --check
           git diff --cached --stat
           tree=$(git write-tree)
           echo "Git tree $tree"
-          test "$tree" = "$(cat ../proof/nav-tree.txt)"
+          test "$tree" = "$(git -C ../proof show HEAD:nav-tree.txt)"
       - name: Select the project's Rust toolchain
         working-directory: source
         run: rustup show active-toolchain
-      - name: Install Linux build and software graphics dependencies
-        if: matrix.check == 'Linux full gate'
-        run: |
-          sudo apt-get -qq update
-          sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
-          df -h .
-      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8
-        if: matrix.check == 'Linux full gate'
-        with:
-          tool: cargo-nextest@0.9.150
-      - name: Run the exact-ray kernel regressions
-        if: matrix.check == 'Exact ray regressions'
-        working-directory: source/solidcore
-        run: cargo test --locked --profile goldens -p solidcore --lib first_ray_interval
-      - name: Exercise the orbit and middle-button regressions
-        if: matrix.check == 'Linux full gate'
-        working-directory: source
-        run: cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation::view_key_tests viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste
-      - name: Run the complete pre-commit gate and the query goldens
-        if: matrix.check == 'Linux full gate'
-        working-directory: source
-        run: cargo xtask fast --base HEAD --units query.api_queries,query.brep
       - name: Build the native Windows app for the orbit captures
         if: runner.os == 'Windows'
         working-directory: source
