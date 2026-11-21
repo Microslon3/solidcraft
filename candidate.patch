@@ -257,7 +257,7 @@ index ae08e103b..1653b94f9 100644
 +    Ok(Some((result, history)))
 +}
 diff --git a/solidcore/crates/solidcore/src/blend/feature_executive.rs b/solidcore/crates/solidcore/src/blend/feature_executive.rs
-index a08202da7..b987bb43c 100644
+index a08202da7..3e26a8f1a 100644
 --- a/solidcore/crates/solidcore/src/blend/feature_executive.rs
 +++ b/solidcore/crates/solidcore/src/blend/feature_executive.rs
 @@ -110,6 +110,8 @@ use crate::topology::face::p3::{FaceBreps, FaceIntersectOptions, IntersectObject
@@ -317,19 +317,30 @@ index a08202da7..b987bb43c 100644
              keep_unported(partition_feature(k, self.base, feature))?;
              keep_unported(build_patches(k, self.base, feature, &mut self.patches))?;
              // `build_patches` marks the feature rebuilt before it refuses an unpartitioned
-@@ -696,6 +727,11 @@ impl<'a> FeatureExecutive<'a> {
+@@ -696,13 +727,17 @@ impl<'a> FeatureExecutive<'a> {
              let Some(feature) = self.features.get_mut(f.feature) else {
                  return Err(refusal);
              };
+-            match restore_feature(k, self.base, feature) {
+-                Ok(()) => {
+-                    self.features.remove(f.feature);
 +            // An obstructed joint patch left its source feature intact.
-+            if untouched.contains(&f.feature) {
-+                self.features.remove(f.feature);
-+                continue;
-+            }
-             match restore_feature(k, self.base, feature) {
-                 Ok(()) => {
-                     self.features.remove(f.feature);
-@@ -1803,6 +1839,19 @@ fn planar_cap_rebuild(k: &mut Kernel, patch: &mut Brep, loop_curves: &[LoopCurve
++            if !untouched.contains(&f.feature) {
++                if let Err(e) = restore_feature(k, self.base, feature) {
++                    return Err(if e.is_unported_or_cancelled() {
++                        e
++                    } else {
++                        refusal
++                    });
+                 }
+-                Err(e) if e.is_unported_or_cancelled() => return Err(e),
+-                Err(_) => return Err(refusal),
+             }
++            self.features.remove(f.feature);
+         }
+         Ok(kept)
+     }
+@@ -1803,6 +1838,19 @@ fn planar_cap_rebuild(k: &mut Kernel, patch: &mut Brep, loop_curves: &[LoopCurve
      Ok(())
  }
  
@@ -349,7 +360,7 @@ index a08202da7..b987bb43c 100644
  /// `SmFeatureExecutive::ExtSurfaceRebuild`: for each source face along the loop edges
  /// a patch face: the face itself with its loop-edge inner loop as outer loop when the
  /// loop edges are not on its outer loop, else its surface extended by `ext_dist` (or
-@@ -1830,17 +1879,7 @@ fn ext_surface_rebuild(
+@@ -1830,17 +1878,7 @@ fn ext_surface_rebuild(
      }
  
      // Set the distance to extend surfaces

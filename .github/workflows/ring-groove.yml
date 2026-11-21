@@ -87,6 +87,10 @@ jobs:
         if: matrix.kind == 'static'
         working-directory: source
         run: cargo xtask fast --base HEAD --no-tests
+      - name: Check the kernel panic-site inventory
+        if: matrix.kind == 'static'
+        working-directory: source/solidcore
+        run: python3 -I scripts/ci/check_panic_sites.py --base HEAD
       - name: Run application kernel tests and the upstream regression grader
         if: matrix.kind == 'app'
         working-directory: source
