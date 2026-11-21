@@ -44,11 +44,118 @@ index a7d6ec3f3f2ceaee62de787d143460dbbd1721ef..78f237c9badd76da74eeee56bcc796d9
      pivot.is_finite().then_some(pivot)
  }
  
+diff --git a/crates/ui-egui/src/view_pick.rs b/crates/ui-egui/src/view_pick.rs
+index c2280b10e21b38243a2edfd4bee47acb72d4f4b5..e554580180fffa031a717b113df92e4a94d8b61e 100644
+--- a/crates/ui-egui/src/view_pick.rs
++++ b/crates/ui-egui/src/view_pick.rs
+@@ -18,6 +18,7 @@ use std::collections::HashMap;
+ use egui::{Pos2, Rect, pos2, vec2};
+ use serde_json::{Value, json};
+ 
++use solidcore_ops::affine::{clipped_line_box_interval, line_halfspace_interval, line_parameter_from_start, line_point_at};
+ use solidcore_record::Vec3;
+ use solidcraft_engine::SectionPlane;
+ use solidcraft_engine::doc::{apply_point, is_identity};
+@@ -315,7 +316,7 @@ fn visible_body_interval(
+     origin: Vec3,
+     dir: Vec3,
+ ) -> Option<(f64, f64)> {
+-    use crate::viewport::{frame_ghosted, ray_box, section_planes};
++    use crate::viewport::{frame_ghosted, section_planes};
+ 
+     let ((near, far), _) = section_ray_interval(&section_planes(app), origin, dir)?;
+     let clip = (near.max(0.0), far);
+@@ -326,10 +327,8 @@ fn visible_body_interval(
+         if bounds.is_empty() || !bounds.min.is_finite() || !bounds.max.is_finite() {
+             return Some(clip.0);
+         }
+-        let pad = bounds.diagonal() * 1e-6 + 1e-9;
+-        let near = ray_box(origin, dir, bounds, pad)?.max(clip.0);
+-        let far = -ray_box(origin, -dir, bounds, pad)?;
+-        (near.is_finite() && near <= far.min(clip.1)).then_some(near)
++        let (near, _) = clipped_line_box_interval([bounds.min.into(), bounds.max.into()], origin.into(), dir.into(), clip, (1e-6, 1e-9), 1e-15)?;
++        near.is_finite().then_some(near)
+     };
+     let replaced = app.preview.effective_replaced();
+     let mut candidates: Vec<_> = tree
+@@ -371,10 +370,10 @@ fn visible_body_interval(
+ /// The nearest displayed triangle in the kept part of the ray, using the mesh's own index.
+ fn mesh_hit_in_clip(app: &SolveApp, body: &solidcraft_engine::doc::ModelBody, origin: Vec3, dir: Vec3, clip: (f64, f64)) -> Option<f64> {
+     let (mesh, place) = body.mesh_in_place();
+-    let (local_origin, local_dir) = crate::viewport::local_ray(&place, origin + dir * clip.0, dir)?;
++    let clipped_origin = Vec3::from(line_point_at(origin.into(), dir.into(), clip.0));
++    let (local_origin, local_dir) = crate::viewport::local_ray(&place, clipped_origin, dir)?;
+     let (t, _) = crate::pick_index::raycast(app.viewport.pick_index.of(&mesh).as_deref(), &mesh, local_origin, local_dir)?;
+-    let depth = t + clip.0;
+-    (depth <= clip.1).then_some(depth)
++    line_parameter_from_start(clip, t)
+ }
+ 
+ /// The hit point and outward surface normal in world space. A flat face (constant mesh
+@@ -447,16 +446,10 @@ pub(crate) fn section_entry(planes: &[SectionPlane], o: Vec3, d: Vec3) -> Option
+ fn section_ray_interval(planes: &[SectionPlane], o: Vec3, d: Vec3) -> Option<((f64, f64), Option<usize>)> {
+     let (mut lo, mut hi, mut through) = (f64::NEG_INFINITY, f64::INFINITY, None);
+     for (i, c) in planes.iter().enumerate() {
+-        // n·(o + d·t) <= n·origin: t·dn <= s.
+-        let (dn, s) = (c.normal.dot(d), c.normal.dot(c.origin - o));
+-        if dn.abs() < 1e-12 {
+-            if s < 0.0 {
+-                return None;
+-            }
+-        } else if dn > 0.0 {
+-            hi = hi.min(s / dn);
+-        } else if s / dn > lo {
+-            (lo, through) = (s / dn, Some(i));
++        let (near, far) = line_halfspace_interval(o.into(), d.into(), c.origin.into(), c.normal.into(), 1e-12)?;
++        hi = hi.min(far);
++        if near > lo {
++            (lo, through) = (near, Some(i));
+         }
+     }
+     (lo <= hi).then_some(((lo, hi), through))
+diff --git a/crates/ui-egui/src/view_pick_tests.rs b/crates/ui-egui/src/view_pick_tests.rs
+index 78cae77781747bf9aed3ade004fe80380963954b..4f99046f169cf93868b9c17995989154b7e6ac2d 100644
+--- a/crates/ui-egui/src/view_pick_tests.rs
++++ b/crates/ui-egui/src/view_pick_tests.rs
+@@ -77,6 +77,33 @@ fn world_rays_pick_without_a_pixel() {
+     assert_eq!(v["ok"], false);
+ }
+ 
++/// The nearer triangle falls outside the section. The farther triangle still answers with its
++/// depth along the world ray, including the distance to the near cutoff.
++#[test]
++fn clipped_mesh_pick_measures_from_the_original_ray_origin() {
++    let mut h = Harness::new();
++    let path = h.dir.join("clipped.obj");
++    std::fs::write(&path, "v 0 0 2\nv 10 0 2\nv 0 10 2\nv 0 0 8\nv 10 0 8\nv 0 10 8\nf 1 2 3\nf 4 5 6\n").unwrap();
++    let imported = h.app.run("file.insert_mesh", json!({"path":path})).unwrap();
++    h.app.run("component.activate", json!({"component":"root"})).unwrap();
++    let copied = h.app.run("occurrence.copy", json!({"component":imported["component"],"translate":[40,-7,4]})).unwrap();
++    let occurrence = copied["occurrence"].as_u64().unwrap();
++    let names = h.app.session.occurrence_bodies(&[occurrence], false).unwrap();
++    assert_eq!(names.len(), 1);
++    let state = crate::open_meshing::session_world(&h.app.session);
++    let body = state.body(&names[0]).unwrap();
++    assert!(body.body.is_mesh());
++    assert!(!solidcraft_engine::doc::is_identity(&body.mesh_in_place().1), "the ray must be transformed to the definition's mesh");
++
++    // The copy's triangles are at world z = 12 and z = 6. The ray crosses their interiors.
++    let origin = Vec3::new(43.0, -3.0, 30.0);
++    let dir = Vec3::new(0.0, 0.0, -1.0);
++    let hit = |clip| super::mesh_hit_in_clip(&h.app, body, origin, dir, clip);
++    assert!(hit((0.0, 30.0)).is_some_and(|depth| (depth - 18.0).abs() < 1e-9), "the nearer triangle");
++    assert!(hit((21.0, 30.0)).is_some_and(|depth| (depth - 24.0).abs() < 1e-9), "the farther triangle, from the original origin");
++    assert_eq!(hit((21.0, 23.0)), None, "the farther triangle is beyond the far cutoff");
++}
++
+ /// A hidden body answers with nothing, as the viewport does not show it.
+ #[test]
+ fn a_hidden_body_is_not_picked() {
 diff --git a/solidcore/crates/solidcore-ops/src/affine.rs b/solidcore/crates/solidcore-ops/src/affine.rs
-index 3a81ca00b7c55b8182c8ee3507810b097611d8f2..2a644413596d454210c94a0b0066e3862208eeee 100644
+index 3a81ca00b7c55b8182c8ee3507810b097611d8f2..87801aae826fb047c092dfc1505e7cc6f6ed8cc0 100644
 --- a/solidcore/crates/solidcore-ops/src/affine.rs
 +++ b/solidcore/crates/solidcore-ops/src/affine.rs
-@@ -7,11 +7,13 @@
+@@ -7,11 +7,14 @@
  //! [`solidcore::Transform::concat`], [`solidcore::Transform::inverse`]); ops checks the
  //! numbers and passes them on. Beside them, how far a point or a box reaches along a direction
  //! ([`distance_along`], [`span_along`]), as the kernel measures it, a point under a map
@@ -58,12 +165,13 @@ index 3a81ca00b7c55b8182c8ee3507810b097611d8f2..2a644413596d454210c94a0b0066e386
  //! [`lifted_quad`], [`parallelogram_point`]).
  
  use solidcore::geom::certified::Verdict;
++use solidcore::geom::extent1d::Extent1d;
  use solidcore::geom::extent3d::Extent3d;
 +use solidcore::geom::geom_utility::p1 as geom;
  use solidcore::{Transform, Vec3};
  
  use crate::body::REGULAR_RATIO;
-@@ -156,6 +158,33 @@ pub fn distance_along(origin: [f64; 3], direction: [f64; 3], point: [f64; 3]) ->
+@@ -156,6 +159,81 @@ pub fn distance_along(origin: [f64; 3], direction: [f64; 3], point: [f64; 3]) ->
      Vec3::from(point).distance_along(Vec3::from(origin), Vec3::from(direction))
  }
  
@@ -87,6 +195,25 @@ index 3a81ca00b7c55b8182c8ee3507810b097611d8f2..2a644413596d454210c94a0b0066e386
 +    )
 +}
 +
++/// The parameters of a line kept on the non-positive side of a plane, through
++/// [`geom::line_halfspace_interval`]. An unbounded end is represented as signed infinity.
++#[must_use]
++pub fn line_halfspace_interval(
++    origin: [f64; 3],
++    direction: [f64; 3],
++    plane_origin: [f64; 3],
++    normal: [f64; 3],
++    min_abs_dot: f64,
++) -> Option<(f64, f64)> {
++    geom::line_halfspace_interval(
++        vec3(origin),
++        vec3(direction),
++        vec3(plane_origin),
++        vec3(normal),
++        min_abs_dot,
++    )
++}
++
 +/// The kernel's point at a signed parameter along a line.
 +#[must_use]
 +pub fn line_point_at(origin: [f64; 3], direction: [f64; 3], parameter: f64) -> [f64; 3] {
@@ -94,29 +221,324 @@ index 3a81ca00b7c55b8182c8ee3507810b097611d8f2..2a644413596d454210c94a0b0066e386
 +    [p.x, p.y, p.z]
 +}
 +
++/// The closed portion of a line's parameter window in the padded box, through
++/// [`Extent3d::clipped_line_interval`]. Padding is a fraction of the diagonal plus
++/// an absolute distance. Signed parameters and grazing endpoints are retained.
++#[must_use]
++pub fn clipped_line_box_interval(
++    bounds: [[f64; 3]; 2],
++    origin: [f64; 3],
++    direction: [f64; 3],
++    window: (f64, f64),
++    padding: (f64, f64),
++    parallel_cutoff: f64,
++) -> Option<(f64, f64)> {
++    let [[x0, y0, z0], [x1, y1, z1]] = bounds;
++    Extent3d::from_bounds(x0, y0, z0, x1, y1, z1).clipped_line_interval(
++        vec3(origin),
++        vec3(direction),
++        window,
++        padding,
++        parallel_cutoff,
++    )
++}
++
++/// The parameter on the original line of a hit measured from `window.0`, if kept by
++/// the closed window. The shifted line and the original line use the same direction.
++#[must_use]
++pub fn line_parameter_from_start(window: (f64, f64), relative: f64) -> Option<f64> {
++    Extent1d::from_raw(window.0, window.1).parameter_from_start(relative)
++}
++
  /// `point` under `matrix` (the row-vector convention above: `p·A + t`), through
  /// [`Transform::transform_points`].
  pub fn apply_point(matrix: &Matrix, point: [f64; 3]) -> [f64; 3] {
+diff --git a/solidcore/crates/solidcore/src/geom/extent1d.rs b/solidcore/crates/solidcore/src/geom/extent1d.rs
+index 6aa6a946f8438128dad0c81ee457293f2e625e0d..14f3ab6f71d4db33b48e571c85c5170aabe382e6 100644
+--- a/solidcore/crates/solidcore/src/geom/extent1d.rs
++++ b/solidcore/crates/solidcore/src/geom/extent1d.rs
+@@ -205,6 +205,14 @@ impl Extent1d {
+         Self { min, max }
+     }
+ 
++    /// Maps a parameter measured from the start back into this interval's frame.
++    /// Both parameters use the same units. The result must lie in the closed interval.
++    #[must_use]
++    pub fn parameter_from_start(&self, relative: f64) -> Option<f64> {
++        let t = self.min + relative;
++        (relative >= 0.0 && t.is_finite() && (self.min..=self.max).contains(&t)).then_some(t)
++    }
++
+     /// Resets to the "inside out" state of [`Extent1d::new`] (`Init`).
+     pub fn init(&mut self) {
+         *self = Self::new();
+@@ -1004,6 +1012,27 @@ mod tests {
+     use super::*;
+     use crate::math::BOUNDED_INFINITE_PARAM;
+ 
++    #[test]
++    fn parameters_from_the_start_stay_in_the_closed_interval() {
++        let span = Extent1d::from_raw(-2.0, 5.0);
++        assert_eq!(span.parameter_from_start(0.0), Some(-2.0));
++        assert_eq!(span.parameter_from_start(4.0), Some(2.0));
++        assert_eq!(span.parameter_from_start(7.0), Some(5.0));
++        assert_eq!(span.parameter_from_start(7.01), None);
++        assert_eq!(span.parameter_from_start(-0.01), None);
++        assert_eq!(
++            Extent1d::from_raw(1e20, 2e20).parameter_from_start(-1.0),
++            None
++        );
++        assert_eq!(
++            Extent1d::from_raw(2.0, f64::INFINITY).parameter_from_start(1.0),
++            Some(3.0)
++        );
++        assert_eq!(
++            Extent1d::from_raw(2.0, f64::INFINITY).parameter_from_start(f64::INFINITY),
++            None
++        );
++    }
+     #[test]
+     fn construct_and_access() {
+         let e = Extent1d::from_min_max(3.0, 1.0);
+diff --git a/solidcore/crates/solidcore/src/geom/extent3d.rs b/solidcore/crates/solidcore/src/geom/extent3d.rs
+index f90e67fefd40715a18b71a19c55adb0a467ffe00..bbc2bd61cc76b54b859b7294ae55d5160f854014 100644
+--- a/solidcore/crates/solidcore/src/geom/extent3d.rs
++++ b/solidcore/crates/solidcore/src/geom/extent3d.rs
+@@ -212,32 +212,35 @@ fn grow_unless_infinite(x: f64, d: f64) -> f64 {
+     x + if is_infinite_param(x) { 0.0 } else { d }
+ }
+ 
++/// The signed parameters where a non-parallel line enters and leaves a slab.
++fn directed_slab(min: f64, max: f64, p: f64, v: f64, use_unbounded_markers: bool) -> (f64, f64) {
++    let (enter, exit) = if v > 0.0 { (min, max) } else { (max, min) };
++    let parameter = |bound: f64| {
++        let delta = bound - p;
++        if delta.is_infinite() && bound.is_finite() && p.is_finite() && v.abs() > 1.0 {
++            // Opposite, large coordinates can still have a representable line parameter.
++            bound / v - p / v
++        } else {
++            delta / v
++        }
++    };
++    let lo = if use_unbounded_markers && is_infinite_param(enter) {
++        -INFINITE_PARAMETER
++    } else {
++        parameter(enter)
++    };
++    let hi = if use_unbounded_markers && is_infinite_param(exit) {
++        INFINITE_PARAMETER
++    } else {
++        parameter(exit)
++    };
++    (lo, hi)
++}
++
+ /// `IntersectLine`'s slab parameters `(tmin, tmax)` along one axis.
+ fn slab(min: f64, max: f64, p: f64, v: f64) -> (f64, f64) {
+-    if v > EFF_ZERO {
+-        let lo = if is_infinite_param(min) {
+-            -INFINITE_PARAMETER
+-        } else {
+-            (min - p) / v
+-        };
+-        let hi = if is_infinite_param(max) {
+-            INFINITE_PARAMETER
+-        } else {
+-            (max - p) / v
+-        };
+-        (lo, hi)
+-    } else if v < -EFF_ZERO {
+-        let hi = if is_infinite_param(min) {
+-            INFINITE_PARAMETER
+-        } else {
+-            (min - p) / v
+-        };
+-        let lo = if is_infinite_param(max) {
+-            -INFINITE_PARAMETER
+-        } else {
+-            (max - p) / v
+-        };
+-        (lo, hi)
++    if v.abs() > EFF_ZERO {
++        directed_slab(min, max, p, v, true)
+     } else {
+         (-BIG_DOUBLE, BIG_DOUBLE)
+     }
+@@ -1107,6 +1110,71 @@ impl Extent3d {
+         Ok(LineHit::Miss)
+     }
+ 
++    /// The closed part of `origin + t * direction` inside a finite box and `window`.
++    /// Each side grows by `padding.0 * box_diagonal + padding.1`. An axis whose direction
++    /// component is smaller in magnitude than `parallel_cutoff` is parallel to its slab.
++    /// The window may extend to infinity. A grazing hit retains equal endpoints.
++    #[must_use]
++    pub fn clipped_line_interval(
++        &self,
++        origin: Point3,
++        direction: Vec3,
++        window: (f64, f64),
++        padding: (f64, f64),
++        parallel_cutoff: f64,
++    ) -> Option<(f64, f64)> {
++        let finite = |p: Vec3| p.to_array().into_iter().all(f64::is_finite);
++        let valid = [self.min, self.max, origin, direction]
++            .into_iter()
++            .all(finite)
++            && [padding.0, padding.1]
++                .into_iter()
++                .all(|p| p.is_finite() && p >= 0.0)
++            && parallel_cutoff.is_finite()
++            && parallel_cutoff > 0.0;
++        if !valid || self.has_negative_volume() {
++            return None;
++        }
++        let size = self.size();
++        let diagonal = size.length();
++        let relative_pad = if padding.0 == 0.0 {
++            0.0
++        } else if diagonal.is_finite() {
++            diagonal * padding.0
++        } else {
++            // A scaled width can be representable even when its square or its subtraction is not.
++            let scaled_width = |min: f64, max: f64, width: f64| {
++                if width.is_finite() {
++                    width * padding.0
++                } else {
++                    max * padding.0 - min * padding.0
++                }
++            };
++            scaled_width(self.min.x, self.max.x, size.x)
++                .hypot(scaled_width(self.min.y, self.max.y, size.y))
++                .hypot(scaled_width(self.min.z, self.max.z, size.z))
++        };
++        let pad = relative_pad + padding.1;
++        let (mut enter, mut exit) = window;
++        for (o, d, min, max) in [
++            (origin.x, direction.x, self.min.x, self.max.x),
++            (origin.y, direction.y, self.min.y, self.max.y),
++            (origin.z, direction.z, self.min.z, self.max.z),
++        ] {
++            let (min, max) = (min - pad, max + pad);
++            if d.abs() < parallel_cutoff {
++                if o < min || o > max {
++                    return None;
++                }
++            } else {
++                let (near, far) = directed_slab(min, max, o, d, false);
++                enter = enter.max(near);
++                exit = exit.min(far);
++            }
++        }
++        (enter <= exit && window.0 <= window.1).then_some((enter, exit))
++    }
++
+     /// True when `min > max` on some axis (e.g. a fresh extent)
+     /// (`HasNegativeVolume`).
+     #[must_use]
+@@ -1361,6 +1429,88 @@ mod tests {
+         assert!(e.intersect_line(p(0.0, 0.0, 0.0), Vec3::ZERO).is_err());
+     }
+ 
++    #[test]
++    fn clipped_line_intervals_keep_signed_hits_grazes_and_thin_boxes() {
++        let e = Extent3d::from_points(p(0.0, 0.0, 0.0), p(2.0, 1.0, 1.0));
++        let full = (f64::NEG_INFINITY, f64::INFINITY);
++        let interval = |origin, direction, window| {
++            e.clipped_line_interval(origin, direction, window, (0.0, 0.0), 1e-15)
++        };
++        assert_eq!(interval(p(0.5, 0.5, 0.5), Vec3::X, full), Some((-0.5, 1.5)));
++        assert_eq!(
++            interval(p(0.5, 0.5, 0.5), Vec3::X, (0.25, 1.0)),
++            Some((0.25, 1.0))
++        );
++        assert_eq!(
++            interval(p(-3.0, 0.5, 0.5), -Vec3::X, full),
++            Some((-5.0, -3.0))
++        );
++        assert_eq!(
++            interval(p(-3.0, 0.5, 0.5), -Vec3::X, (0.0, f64::INFINITY)),
++            None
++        );
++        assert_eq!(
++            interval(p(-1.0, 0.0, 0.5), p(1.0, 1.0, 0.0), full),
++            Some((1.0, 1.0))
++        );
++        assert_eq!(
++            interval(p(0.0, -1e-15, 0.5), p(1.0, 1e-15, 0.0), full),
++            Some((1.0, 2.0))
++        );
++        assert_eq!(
++            interval(p(0.0, -1e-15, 0.5), p(1.0, 0.5e-15, 0.0), full),
++            None
++        );
++        let thin = Extent3d::from_points(Vec3::ZERO, p(1e-16, 1.0, 1.0));
++        assert_eq!(
++            thin.clipped_line_interval(p(0.0, 0.5, 0.5), Vec3::X, full, (0.0, 0.0), 1e-15),
++            Some((0.0, 1e-16))
++        );
++    }
++
++    #[test]
++    fn clipped_line_interval_pads_by_the_diagonal_and_absolute_allowance() {
++        let e = Extent3d::from_points(Vec3::ZERO, p(2.0, 0.0, 0.0));
++        let full = (f64::NEG_INFINITY, f64::INFINITY);
++        let line = p(0.0, 0.5, 0.0);
++        assert_eq!(
++            e.clipped_line_interval(line, Vec3::X, full, (0.0, 0.0), 1e-15),
++            None
++        );
++        assert_eq!(
++            e.clipped_line_interval(line, Vec3::X, full, (0.25, 0.125), 1e-15),
++            Some((-0.625, 2.625))
++        );
++        let large = Extent3d::from_points(Vec3::ZERO, p(1e155, 1.0, 1.0));
++        assert_eq!(
++            large.clipped_line_interval(p(0.0, 1e152, 0.0), Vec3::X, full, (1e-6, 0.0), 1e-15),
++            None
++        );
++        let far = 1.5 * 2.0_f64.powi(1023);
++        let stretched = Extent3d::from_points(p(-far, 0.0, 0.0), p(far, 0.0, 0.0));
++        assert_eq!(
++            stretched.clipped_line_interval(
++                p(0.0, far * 0.5, 0.0),
++                Vec3::X,
++                full,
++                (0.0625, 0.0),
++                1e-15
++            ),
++            None
++        );
++        let opposite = Extent3d::from_points(p(-far, 0.0, 0.0), p(-far * 0.5, 1.0, 1.0));
++        assert_eq!(
++            opposite.clipped_line_interval(
++                p(far, 0.5, 0.5),
++                p(-2.0, 0.0, 0.0),
++                (0.0, far),
++                (0.0, 0.0),
++                1e-15
++            ),
++            Some((0.75 * far, far))
++        );
++    }
++
+     #[test]
+     fn bounded_and_approximation() {
+         let mut e = Extent3d::new();
 diff --git a/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs b/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs
-index 0de4f1e32543086193b071e65526d20308af0f28..b84438fd3e351070c27991fa627b2121501c7e9a 100644
+index 0de4f1e32543086193b071e65526d20308af0f28..ba5dc5a5fc94d13a7a5e9c9253b66465c3a4f92c 100644
 --- a/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs
 +++ b/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs
-@@ -414,16 +414,58 @@ pub fn line_plane_intersect(
+@@ -414,16 +414,88 @@ pub fn line_plane_intersect(
  
      let plane_eq_d = -plane_norm.dot(plane_pnt);
      let tol = EFF_ZERO * line_vec.max_dimension() + EFF_ZERO_SQ;
--    let denom = line_vec.dot(plane_norm);
-+    line_plane_parameter_from_offset(line_vec, plane_norm, tol, || {
++    line_plane_parameter_from_offset(line_vec.dot(plane_norm), tol, || {
 +        plane_eq_d + line_pnt.dot(plane_norm)
 +    })
 +    .ok_or_else(|| SolidError::geom_failed(OP, "the line is parallel to the plane"))
 +}
- 
--    if denom.abs() < tol {
--        return Err(SolidError::geom_failed(
--            OP,
--            "the line is parallel to the plane",
--        )); // Parallel case
++
 +/// The signed parameter where a line meets the plane through the given point.
 +/// `min_abs_dot` is the caller's positive cutoff on the absolute dot product of the
 +/// line direction and plane normal. Below that cutoff the line is considered parallel.
@@ -131,33 +553,68 @@ index 0de4f1e32543086193b071e65526d20308af0f28..b84438fd3e351070c27991fa627b2121
 +    plane_norm: Vec3,
 +    min_abs_dot: f64,
 +) -> Option<f64> {
-+    let finite = |v: Vec3| v.x.is_finite() && v.y.is_finite() && v.z.is_finite();
-+    if !(min_abs_dot.is_finite()
-+        && min_abs_dot > 0.0
-+        && [line_pnt, line_vec, plane_pnt, plane_norm]
-+            .into_iter()
-+            .all(finite))
-+    {
+     let denom = line_vec.dot(plane_norm);
++    if !(min_abs_dot.is_finite() && min_abs_dot > 0.0 && denom.is_finite()) {
 +        return None;
-     }
-+    line_plane_parameter_from_offset(line_vec, plane_norm, min_abs_dot, || {
++    }
++    line_plane_parameter_from_offset(denom, min_abs_dot, || {
 +        line_pnt.distance_along(plane_pnt, plane_norm)
 +    })
 +    .filter(|parameter| parameter.is_finite())
 +}
  
--    Ok(-(plane_eq_d + line_pnt.dot(plane_norm)) / denom)
+-    if denom.abs() < tol {
+-        return Err(SolidError::geom_failed(
+-            OP,
+-            "the line is parallel to the plane",
+-        )); // Parallel case
 +fn line_plane_parameter_from_offset(
-+    line_vec: Vec3,
-+    plane_norm: Vec3,
++    denom: f64,
 +    min_abs_dot: f64,
 +    offset: impl FnOnce() -> f64,
 +) -> Option<f64> {
-+    let denom = line_vec.dot(plane_norm);
 +    if denom.abs() < min_abs_dot {
 +        return None;
-+    }
+     }
 +    Some(-offset() / denom)
++}
+ 
+-    Ok(-(plane_eq_d + line_pnt.dot(plane_norm)) / denom)
++/// Line parameters kept by the closed half-space on the non-positive side of the plane.
++/// The caller sets the minimum absolute dot product to treat a line as non-parallel.
++/// An intercept beyond a representable parameter is kept as a signed unbounded end.
++/// Returns `None` when no finite parameter lies in the half-space or the input is invalid.
++#[must_use]
++pub fn line_halfspace_interval(
++    line_pnt: Point3,
++    line_vec: Vec3,
++    plane_pnt: Point3,
++    plane_norm: Vec3,
++    min_abs_dot: f64,
++) -> Option<(f64, f64)> {
++    let finite = |v: Vec3| v.to_array().into_iter().all(f64::is_finite);
++    let denom = line_vec.dot(plane_norm);
++    if !(min_abs_dot.is_finite() && min_abs_dot > 0.0 && denom.is_finite())
++        || ![line_pnt, line_vec, plane_pnt, plane_norm]
++            .into_iter()
++            .all(finite)
++    {
++        return None;
++    }
++    let offset = line_pnt.distance_along(plane_pnt, plane_norm);
++    if offset.is_nan() {
++        return None;
++    }
++    let full = (f64::NEG_INFINITY, f64::INFINITY);
++    let Some(t) = line_plane_parameter_from_offset(denom, min_abs_dot, || offset) else {
++        return (offset <= 0.0).then_some(full);
++    };
++    let (near, far) = if denom > 0.0 {
++        (full.0, t)
++    } else {
++        (t, full.1)
++    };
++    (near < full.1 && far > full.0).then_some((near, far))
 +}
 +
 +/// A point at a signed parameter along a line, `origin + parameter * direction`.
@@ -167,7 +624,7 @@ index 0de4f1e32543086193b071e65526d20308af0f28..b84438fd3e351070c27991fa627b2121
  }
  
  /// Intersection of the line `line_pt + t * line_vec` with the plane
-@@ -1933,6 +1975,41 @@ mod tests {
+@@ -1933,6 +2005,91 @@ mod tests {
          assert!((a - 45.0).abs() < 1e-12);
      }
  
@@ -196,6 +653,16 @@ index 0de4f1e32543086193b071e65526d20308af0f28..b84438fd3e351070c27991fa627b2121
 +        );
 +        assert_eq!(
 +            line_plane_parameter(
++                Vec3::ZERO,
++                v(f64::MAX, 0.0, 0.0),
++                Vec3::X,
++                v(2.0, 0.0, 0.0),
++                1e-9
++            ),
++            None
++        );
++        assert_eq!(
++            line_plane_parameter(
 +                v(f64::MAX, 0.0, 0.0),
 +                Vec3::X,
 +                v(-f64::MAX, 0.0, 0.0),
@@ -204,6 +671,46 @@ index 0de4f1e32543086193b071e65526d20308af0f28..b84438fd3e351070c27991fa627b2121
 +            ),
 +            None
 +        );
++    }
++
++    #[test]
++    fn line_halfspace_interval_keeps_the_right_side_and_parallel_lines() {
++        let full = (f64::NEG_INFINITY, f64::INFINITY);
++        let clip = |line_pnt, line_vec, plane_pnt| {
++            line_halfspace_interval(line_pnt, line_vec, plane_pnt, Vec3::Z, 1e-12)
++        };
++        assert_eq!(
++            clip(Vec3::ZERO, Vec3::Z, v(0.0, 0.0, 5.0)),
++            Some((full.0, 5.0))
++        );
++        assert_eq!(
++            clip(Vec3::ZERO, -Vec3::Z, v(0.0, 0.0, -5.0)),
++            Some((5.0, full.1))
++        );
++        assert_eq!(clip(-Vec3::Z, Vec3::X, Vec3::ZERO), Some(full));
++        assert_eq!(clip(Vec3::ZERO, Vec3::X, Vec3::ZERO), Some(full));
++        assert_eq!(clip(Vec3::Z, v(1.0, 0.0, 0.5e-12), Vec3::ZERO), None);
++    }
++
++    #[test]
++    fn line_halfspace_interval_handles_intercepts_that_overflow() {
++        let d = v(0.75_f64.sqrt(), 0.0, 0.5);
++        let full = (f64::NEG_INFINITY, f64::INFINITY);
++        let plane = v(0.0, 0.0, 1e308);
++        for direction in [d, -d] {
++            assert_eq!(
++                line_halfspace_interval(Vec3::ZERO, direction, plane, Vec3::Z, 1e-12),
++                Some(full)
++            );
++            assert_eq!(
++                line_halfspace_interval(Vec3::ZERO, direction, -plane, Vec3::Z, 1e-12),
++                None
++            );
++            assert_eq!(
++                line_plane_parameter(Vec3::ZERO, direction, plane, Vec3::Z, 1e-12),
++                None
++            );
++        }
 +    }
 +
      #[test]

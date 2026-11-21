@@ -114,7 +114,10 @@ jobs:
       - name: Check all changed geometry units against the reference
         if: matrix.kind == 'goldens'
         working-directory: source/solidcore
-        run: cargo run --locked --profile goldens -p goldens -- --unit geom.geom_utility_p1 --unit query.api_queries --unit query.brep --goldens
+        run: >-
+          cargo run --locked --profile goldens -p goldens --
+          --unit geom.extent1d --unit geom.extent3d --unit geom.geom_utility_p1
+          --unit query.api_queries --unit query.brep --goldens
       - name: Build the native Windows app
         if: matrix.kind == 'winbuild'
         working-directory: source
@@ -132,4 +135,4 @@ jobs:
         if: matrix.kind == 'wintest'
         working-directory: source
         run: >-
-          cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation:: viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste another_device_starts_with_no_buttons_seen_and_no_settling
+          cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation:: view_pick::tests:: viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste another_device_starts_with_no_buttons_seen_and_no_settling
