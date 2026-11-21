@@ -1,0 +1,473 @@
+diff --git a/crates/ui-egui/src/update.rs b/crates/ui-egui/src/update.rs
+index ccfbca5b271884b893c2fd54da81b294eae2ff6f..4698b630dd5f043c936d07175f2c95b373d98c0b 100644
+--- a/crates/ui-egui/src/update.rs
++++ b/crates/ui-egui/src/update.rs
+@@ -1040,8 +1040,11 @@ pub fn show(app: &mut SolveApp, ctx: &egui::Context) {
+     };
+     let id = egui::Id::unique("sc_update");
+     let mut also_download = false;
+-    let (closed, answer) =
+-        ui_kit::Window::new(id, "update", solidcraft_ui_text::tr("update.title")).cards(1.7).actions(ok, cancel, apply).show(ctx, true, |ui| {
++    let (closed, answer) = ui_kit::Window::new(id, "update", solidcraft_ui_text::tr("update.title"))
++        .cards(1.7)
++        .actions(ok, cancel, apply)
++        .wrap_actions()
++        .show(ctx, true, |ui| {
+             ui_kit::text(
+                 ui,
+                 &solidcraft_ui_text::format("update.available", &[("version", release.version())]),
+@@ -1455,12 +1458,16 @@ pub fn row_spans(cells: &[Vec<Span>], header: bool) -> Vec<Span> {
+ }
+ 
+ fn markdown(ui: &mut egui::Ui, src: &str, t: &Tokens) {
+-    markdown_blocks(ui, &parse_markdown(src), t);
++    show_markdown_blocks(ui, &parse_markdown(src), t, true);
+ }
+ 
+ /// Parsed Markdown, for a text shown every frame that is parsed once (the About dialog's
+ /// attributions, #7776).
+ pub fn markdown_blocks(ui: &mut egui::Ui, blocks: &[Block], t: &Tokens) {
++    show_markdown_blocks(ui, blocks, t, false);
++}
++
++fn show_markdown_blocks(ui: &mut egui::Ui, blocks: &[Block], t: &Tokens, inline_links: bool) {
+     let body = ui.visuals().text_color();
+     let job = |spans: &[Span], size: f32, strong: bool, wrap: f32| {
+         let mut job = LayoutJob::default();
+@@ -1476,9 +1483,39 @@ pub fn markdown_blocks(ui: &mut egui::Ui, blocks: &[Block], t: &Tokens) {
+         }
+         job
+     };
+-    // A laid-out text can't be clicked in parts: a block's web links follow it as buttons that
+-    // open them in the browser (#2943), as the agent chat shows its links.
++    let draw = |ui: &mut egui::Ui, spans: &[Span], size: f32, strong: bool, wrap: f32| {
++        if !inline_links || !spans.iter().any(|span| matches!(span, Span::Link { url: Some(_), .. })) {
++            ui.add(egui::Label::new(job(spans, size, strong, wrap)).wrap());
++            return;
++        }
++
++        // Egui's wrapping horizontal layout lets a label continue on the next line. Draw each
++        // text run up to the next link, then its native hyperlink in the same flow.
++        let layout = egui::Layout::left_to_right(egui::Align::Min).with_main_wrap(true);
++        ui.allocate_ui_with_layout(egui::vec2(wrap.max(0.0), 0.0), layout, |ui| {
++            ui.spacing_mut().item_spacing.x = 0.0;
++            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
++            ui.visuals_mut().hyperlink_color = t.accent;
++            let mut start = 0;
++            for (index, span) in spans.iter().enumerate() {
++                if let Span::Link { text, url: Some(url) } = span {
++                    if index > start {
++                        ui.add(egui::Label::new(job(&spans[start..index], size, strong, wrap)).wrap());
++                    }
++                    ui.hyperlink_to(RichText::new(text).size(size), url).backing_on_hover_text(url);
++                    start = index + 1;
++                }
++            }
++            if let Some(trailing) = spans.get(start..).filter(|trailing| !trailing.is_empty()) {
++                ui.add(egui::Label::new(job(trailing, size, strong, wrap)).wrap());
++            }
++        });
++    };
++    // The About tables retain their separate link row (#2943).
+     let links = |ui: &mut egui::Ui, spans: &[Span], indent: f32| {
++        if inline_links {
++            return;
++        }
+         let targets: Vec<(&str, &str)> = spans
+             .iter()
+             .filter_map(|s| match s {
+@@ -1502,17 +1539,17 @@ pub fn markdown_blocks(ui: &mut egui::Ui, blocks: &[Block], t: &Tokens) {
+         match block {
+             Block::Heading(spans) => {
+                 ui.add_space(4.0);
+-                ui.add(egui::Label::new(job(spans, t.font_heading, true, width)).wrap());
++                draw(ui, spans, t.font_heading, true, width);
+             }
+             Block::Paragraph(spans) => {
+-                ui.add(egui::Label::new(job(spans, t.font_label, false, width)).wrap());
++                draw(ui, spans, t.font_label, false, width);
+                 links(ui, spans, 0.0);
+                 ui.add_space(3.0);
+             }
+             Block::Row { header, cells } => {
+                 let spans = row_spans(cells, *header);
+                 let size = if *header { t.font_caption } else { t.font_label };
+-                ui.add(egui::Label::new(job(&spans, size, false, width)).wrap());
++                draw(ui, &spans, size, false, width);
+                 links(ui, &spans, 0.0);
+                 ui.add_space(2.0);
+             }
+@@ -1521,7 +1558,7 @@ pub fn markdown_blocks(ui: &mut egui::Ui, blocks: &[Block], t: &Tokens) {
+                 ui.horizontal_top(|ui| {
+                     ui.add_space(indent);
+                     ui.label(RichText::new("•").size(solidcraft_theme::Tokens::get().font_label));
+-                    ui.add(egui::Label::new(job(spans, t.font_label, false, width - indent - 14.0)).wrap());
++                    draw(ui, spans, t.font_label, false, width - indent - 14.0);
+                 });
+                 links(ui, spans, indent + 14.0);
+             }
+diff --git a/crates/ui-egui/src/update/tests.rs b/crates/ui-egui/src/update/tests.rs
+index 99b710d16c76435cf41ca492cc103009d7644db8..d6c5fd1c1d1b5d3858fe173b9ad9f24e75e7b003 100644
+--- a/crates/ui-egui/src/update/tests.rs
++++ b/crates/ui-egui/src/update/tests.rs
+@@ -628,6 +628,74 @@ fn the_title_bar_offers_the_new_version_and_opens_the_update_window() {
+     assert!(h.widget(&label).is_none(), "Remind me later hides it");
+ }
+ 
++fn windows_update_offer(notes: &str) -> crate::scenario::Harness {
++    let mut h = crate::scenario::Harness::new();
++    h.app.home.open = false;
++    h.app.preferences.check_updates = false;
++    h.app.updater.kind = Some(InstallKind::WindowsMsi);
++    h.app.updater.managed = Some(None);
++    h.app.services.http_get = Some(Arc::new(|_| panic!("the offer must not fetch anything")));
++    h.app.services.http_download = Some(Arc::new(|_, _, _| panic!("do not install in this test")));
++    h.app.updater.release = Some(Release::parse(json!({"tag_name":"v999.0.0","body":notes,"assets":[]}).to_string().as_bytes()).unwrap());
++    h.app.updater.open = true;
++    h
++}
++
++#[test]
++fn russian_update_actions_fit_when_the_window_is_narrow() {
++    let notes = "- Confirm the full footer stays visible even with a long list of release notes.\n".repeat(28);
++    for (width, action) in [(449, "cancel"), (220, "apply")] {
++        let mut h = windows_update_offer(&notes);
++        h.app.preferences.language = "ru".into();
++        h.call("ui.resize", json!({"width":width,"height":365}));
++        h.frames(3);
++        let footer = crate::scenario::rect_of("dialog:footer").unwrap();
++        let window = crate::scenario::rect_of("update:window").unwrap();
++        let screen = h.ctx.content_rect();
++        assert!(screen.contains_rect(footer) && window.contains_rect(footer), "{width}: footer {footer:?} is visible in {window:?}");
++        for (key, label) in
++            [("dialog:ok", "Установить (закроет SolidCraft)"), ("dialog:apply", "Пропустить эту версию"), ("dialog:cancel", "Напомнить позже")]
++        {
++            let target = crate::scenario::rect_of(key).unwrap();
++            assert!(footer.contains_rect(target), "{width}: {label} target {target:?} in {footer:?}");
++            let paint = h.shapes.iter().find_map(|shape| match &shape.shape {
++                egui::Shape::Text(text) if text.galley.job.text == label => Some((shape.clip_rect, text.visual_bounding_rect())),
++                _ => None,
++            });
++            let (clip, label_rect) = paint.unwrap_or_else(|| panic!("{width}: {label} is painted"));
++            assert!(clip.contains_rect(label_rect) && footer.contains_rect(label_rect), "{width}: {label} {label_rect:?} clipped to {clip:?}");
++        }
++        let point = crate::scenario::rect_of(&format!("dialog:{action}")).unwrap().center();
++        h.call("ui.click", json!({"x":point.x,"y":point.y}));
++        assert!(!h.app.updater.open);
++        if action == "apply" {
++            assert_eq!(h.app.preferences.update.skipped, "999.0.0");
++        } else {
++            assert!(h.app.preferences.update.remind_after > 0.0);
++            assert!(h.app.preferences.update.skipped.is_empty());
++        }
++    }
++}
++
++#[test]
++fn release_note_pr_numbers_are_painted_once_and_keep_their_link() {
++    let target = "https://github.com/tangency-labs/solidcraft/pull/16906";
++    let mut h = windows_update_offer(&format!("- Faster rebuilds by somebody in {target}."));
++    h.frames(3);
++    let texts: Vec<_> = h
++        .shapes
++        .iter()
++        .filter_map(|shape| match &shape.shape {
++            egui::Shape::Text(text) => Some(text.galley.job.text.as_str()),
++            _ => None,
++        })
++        .collect();
++    assert_eq!(texts.iter().filter(|text| text.contains("#16906")).count(), 1, "{texts:?}");
++    let [x, y] = h.widget("#16906").expect("the visible PR number is a native link");
++    h.call("ui.click", json!({"x":x,"y":y}));
++    assert_eq!(h.take_opened(), [target]);
++}
++
+ #[test]
+ fn the_pill_shortens_in_a_narrow_title_bar() {
+     let dir = scratch();
+diff --git a/crates/ui-kit/src/actions.rs b/crates/ui-kit/src/actions.rs
+index f7887cb37d38c9cd6cd673a22a5a81561a46f26c..d011f5161125ca0e17125294eaf9f6a52a7b6781 100644
+--- a/crates/ui-kit/src/actions.rs
++++ b/crates/ui-kit/src/actions.rs
+@@ -293,6 +293,46 @@ pub fn footer(ui: &mut Ui, ok_label: &str, cancel_label: &str, ok_enabled: bool,
+     footer_with_left(ui, ok_label, cancel_label, ok_enabled, options, |_| {})
+ }
+ 
++fn footer_labels<'a>(ok: &'a str, cancel: &'a str, apply: Option<&'a str>) -> impl Iterator<Item = (&'a str, Action)> {
++    [(ok, Action::Ok), (apply.unwrap_or(""), Action::Apply), (cancel, Action::Cancel)].into_iter().filter(|(label, _)| !label.is_empty())
++}
++
++fn action_button_space(primary: bool, tokens: &Tokens) -> (f32, f32) {
++    if primary { (tokens.space_16, tokens.space_24 * 3.0) } else { (tokens.space_12, 0.0) }
++}
++
++/// The height of a stacked footer when the translated labels do not fit in one row.
++/// Measure before laying out the scrollable body so the footer always has its own space.
++pub(super) fn stacked_footer_height(ui: &Ui, ok: &str, cancel: &str, apply: Option<&str>, valid: bool) -> Option<f32> {
++    let t = Tokens::get();
++    let width = (dimension(ui.available_width()) - t.space_12 * 2.0).max(0.0);
++    let labels = footer_labels(ok, cancel, apply);
++    let font = |action| {
++        if action == Action::Ok && valid { crate::type_face::bold(t.font_label) } else { egui::FontId::proportional(t.font_label) }
++    };
++    let gaps = (footer_labels(ok, cancel, apply).count().saturating_sub(1) as f32) * t.space_6;
++    let normal_width = labels
++        .map(|(label, action)| {
++            let (padding, min_width) = action_button_space(action == Action::Ok, &t);
++            let size = ui.painter().layout_no_wrap(solidcraft_ui_text::tr_label(label).to_owned(), font(action), t.form_ink).size();
++            (size.x.ceil() + padding * 2.0).max(min_width)
++        })
++        .sum::<f32>()
++        + gaps;
++    if normal_width <= width {
++        return None;
++    }
++    let buttons = footer_labels(ok, cancel, apply)
++        .map(|(label, action)| {
++            let (padding, _) = action_button_space(action == Action::Ok, &t);
++            let wrap_at = width - padding.min(width / 8.0).floor() * 2.0;
++            let size = ui.painter().layout(solidcraft_ui_text::tr_label(label).to_owned(), font(action), t.form_ink, wrap_at).size();
++            size.y.ceil().max(t.form_button_height).max(ui.spacing().interact_size.y)
++        })
++        .sum::<f32>();
++    Some(t.form_footer_height - t.form_button_height + buttons + gaps)
++}
++
+ pub(super) fn footer_with_left(
+     ui: &mut Ui,
+     ok_label: &str,
+@@ -300,16 +340,26 @@ pub(super) fn footer_with_left(
+     ok_enabled: bool,
+     options: Footer<'_>,
+     left: impl FnOnce(&mut Ui),
++) -> Action {
++    draw_footer(ui, ok_label, cancel_label, ok_enabled, options, None, left)
++}
++
++pub(super) fn draw_footer(
++    ui: &mut Ui,
++    ok_label: &str,
++    cancel_label: &str,
++    ok_enabled: bool,
++    options: Footer<'_>,
++    stacked_height: Option<f32>,
++    left: impl FnOnce(&mut Ui),
+ ) -> Action {
+     let Footer { apply: apply_label, status, selected, danger, confirm, corners, secondary_left, nothing_to_apply } = options;
+     let t = Tokens::get();
+     let ok_enabled = ok_enabled && !ok_label.is_empty();
+     // The footer is a full-width band (the card has no margin of its own): its own fill, a rule
+     // on top, and the buttons right-aligned with 10 pt above/below and 12 pt at the sides.
+-    let (band, _) = ui.allocate_exact_size(
+-        vec2(dimension(ui.available_width()), t.form_footer_height + if confirm { t.space_4 } else { 0.0 }),
+-        egui::Sense::hover(),
+-    );
++    let height = stacked_height.unwrap_or(t.form_footer_height) + if confirm { t.space_4 } else { 0.0 };
++    let (band, _) = ui.allocate_exact_size(vec2(dimension(ui.available_width()), height), egui::Sense::hover());
+     let corners = corners.unwrap_or(egui::CornerRadius::same(t.radius_xl));
+     ui.painter().rect_filled(
+         band,
+@@ -319,7 +369,9 @@ pub(super) fn footer_with_left(
+     t.secondary_hline(ui.painter(), band.x_range(), band.top(), t.dialog_rule);
+     solidcraft_ui_registry::publish_rect("dialog:footer", band);
+     solidcraft_ui_registry::publish_count("dialog:ok:enabled", f64::from(ok_enabled && ui.is_enabled()));
+-    let inner = band.shrink2(vec2(t.space_12, t.space_10));
++    let stacked = stacked_height.is_some();
++    let inset = if stacked { t.space_12.min(band.width() / 2.0) } else { t.space_12 };
++    let inner = band.shrink2(vec2(inset, t.space_10));
+     solidcraft_ui_registry::publish_rect("dialog:footer:actions", inner);
+     let mut action = if ui.is_enabled() { keyboard(ui.ctx(), ok_enabled) } else { Action::None };
+     let look = ActionLook::new(ok_enabled, !nothing_to_apply, selected, danger);
+@@ -328,22 +380,20 @@ pub(super) fn footer_with_left(
+         solidcraft_ui_registry::publish_count("dialog:apply:enabled", f64::from(live && ui.is_enabled()));
+     }
+     let mut actions_left = inner.right();
++    let layout = if stacked { egui::Layout::top_down(egui::Align::Max) } else { egui::Layout::right_to_left(egui::Align::Center) };
+     let row = ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
++        ui.with_layout(layout, |ui| {
+             ui.spacing_mut().item_spacing.x = t.space_6;
+-            for (label, kind) in [(ok_label, Action::Ok), (apply_label.unwrap_or(""), Action::Apply), (cancel_label, Action::Cancel)] {
+-                if (kind == Action::Apply && (apply_label.is_none() || confirm)) || (kind == Action::Ok && ok_label.is_empty()) || label.is_empty() {
+-                    continue;
++            if stacked {
++                ui.spacing_mut().item_spacing.y = t.space_6;
++            }
++            for (label, kind) in footer_labels(ok_label, cancel_label, apply_label.filter(|_| !confirm)) {
++                let (mut padding, mut min_width) = action_button_space(look.primary(kind), &t);
++                if stacked {
++                    padding = padding.min(inner.width() / 8.0).floor();
++                    min_width = min_width.min(inner.width());
+                 }
+-                let primary = look.primary(kind);
+-                let response = action_button(
+-                    ui,
+-                    label,
+-                    kind,
+-                    &look,
+-                    if primary { t.space_16 } else { t.space_12 },
+-                    if primary { t.space_24 * 3.0 } else { 0.0 },
+-                );
++                let response = action_button(ui, label, kind, &look, padding, min_width, stacked);
+                 actions_left = actions_left.min(response.rect.left());
+                 if response.clicked() {
+                     action = kind;
+@@ -423,7 +473,7 @@ impl ActionLook {
+ 
+ /// One OK, Apply or Cancel button, `padding` at its sides and at least `min_width` wide, with its
+ /// scenario handles (`dialog:ok`, `dialog:apply`, `dialog:cancel` and `dialog:<label>`).
+-fn action_button(ui: &mut Ui, label: &str, kind: Action, look: &ActionLook, padding: f32, min_width: f32) -> Response {
++fn action_button(ui: &mut Ui, label: &str, kind: Action, look: &ActionLook, padding: f32, min_width: f32, wrap: bool) -> Response {
+     let t = Tokens::get();
+     let ok_enabled = look.ok_enabled;
+     let marked = look.selected == Some(kind);
+@@ -441,7 +491,11 @@ fn action_button(ui: &mut Ui, label: &str, kind: Action, look: &ActionLook, padd
+     // Style after add_enabled sets the state, preserving the native button's ID and layout.
+     let response = ui.add_enabled(live, |ui: &mut Ui| {
+         let text = if primary && ok_enabled { text.bold_face() } else { text };
+-        ui.add(form_action_widget(ui, text, tone, marked && !primary, vec2(min_width, t.form_button_height)))
++        let mut button = form_action_widget(ui, text, tone, marked && !primary, vec2(min_width, t.form_button_height));
++        if wrap {
++            button = button.wrap_mode(egui::TextWrapMode::Wrap);
++        }
++        ui.add(button)
+     });
+     t.button_bevel(ui, &response, false);
+     pointer_on_hover(ui, &response);
+@@ -535,7 +589,7 @@ impl<'a> HeaderActions<'a> {
+                 .id_salt(("header_action", *kind as u8))
+                 .max_rect(*rect)
+                 .layout(egui::Layout::centered_and_justified(egui::Direction::LeftToRight));
+-            let response = ui.scope_builder(builder, |ui| action_button(ui, label, *kind, &look, padding, 0.0)).inner;
++            let response = ui.scope_builder(builder, |ui| action_button(ui, label, *kind, &look, padding, 0.0, false)).inner;
+             if response.clicked() {
+                 action = *kind;
+             }
+diff --git a/crates/ui-kit/src/panel.rs b/crates/ui-kit/src/panel.rs
+index 01257a56c9f512709c35b580e37d548bdc704529..7e9b9d6fa61a826375b383251bf63ecd69592993 100644
+--- a/crates/ui-kit/src/panel.rs
++++ b/crates/ui-kit/src/panel.rs
+@@ -1101,7 +1101,7 @@ impl<'a> Panel<'a> {
+ }
+ 
+ /// System window built on Panel's shared floating card: 40 pt header, bounded content,
+-/// optional page list, and 48 pt actions with a left slot. Existing IDs and editor policies
++/// optional page list, and a footer with a left slot. Existing IDs and editor policies
+ /// survive the migration. All geometry and colours derive from Tokens.
+ pub struct Window<'a> {
+     id: egui::Id,
+@@ -1122,6 +1122,7 @@ pub struct Window<'a> {
+     page_padding: egui::Margin,
+     page_chrome: bool,
+     left_slot: bool,
++    wrap_actions: bool,
+     page_header_in_titlebar: bool,
+ }
+ 
+@@ -1147,6 +1148,7 @@ impl<'a> Window<'a> {
+             page_padding: egui::Margin::same(Tokens::get().space_16 as i8),
+             page_chrome: false,
+             left_slot: false,
++            wrap_actions: false,
+             page_header_in_titlebar: false,
+         }
+     }
+@@ -1170,6 +1172,13 @@ impl<'a> Window<'a> {
+         self
+     }
+ 
++    /// Stack the footer actions if their labels do not fit in a row. Windows with a separate
++    /// pinned left slot retain the single-row footer.
++    pub fn wrap_actions(mut self) -> Self {
++        self.wrap_actions = true;
++        self
++    }
++
+     /// Whether the third action has anything to do: for an Apply that keeps the window open,
+     /// whether anything changed since it opened or since the last Apply (#8561). Without it
+     /// the action is disabled for the pointer, the keyboard and accessibility.
+@@ -1270,11 +1279,16 @@ impl<'a> Window<'a> {
+             if !self.page_header_in_titlebar {
+                 header_impl(ui, (self.icon, self.page_chrome.then_some(t.form_primary)), self.title, None, self.closeable, || close = true);
+             }
++            let stacked_height = if self.wrap_actions && !self.left_slot {
++                super::actions::stacked_footer_height(ui, self.ok, self.cancel, self.apply, valid)
++            } else {
++                None
++            };
++            let footer_height = stacked_height.unwrap_or(t.form_footer_height);
+             egui::Frame::NONE.inner_margin(if self.body_padding { t.space_12 } else { 0.0 }).show(ui, |ui| {
+                 ui.spacing_mut().item_spacing.y = t.form_gap_y;
+                 if self.body_padding {
+-                    let height =
+-                        (dimension(ui.ctx().content_rect().height()) - t.form_header_height - t.form_footer_height - t.space_24 * 2.0).max(0.0);
++                    let height = (dimension(ui.ctx().content_rect().height()) - t.form_header_height - footer_height - t.space_24 * 2.0).max(0.0);
+                     // Offer the body all the room the screen leaves, not just the height the card
+                     // had last frame: a card first laid out on a tiny page (a browser canvas not
+                     // sized yet) would otherwise keep a body of no height, its buttons hidden (#9472).
+@@ -1297,12 +1311,13 @@ impl<'a> Window<'a> {
+             let action = if self.ok.is_empty() && self.cancel.is_empty() && self.apply.is_none() && !self.left_slot {
+                 super::Action::None
+             } else {
+-                super::actions::footer_with_left(
++                super::actions::draw_footer(
+                     ui,
+                     self.ok,
+                     self.cancel,
+                     valid,
+                     super::Footer { apply: self.apply, nothing_to_apply: self.nothing_to_apply, ..Default::default() },
++                    stacked_height,
+                     left,
+                 )
+             };
+diff --git a/crates/ui-kit/src/panel_tests.rs b/crates/ui-kit/src/panel_tests.rs
+index f5ec536534fa1cd3e464f83a075644f5073dcbc2..e277c722e4b4b4827c552e7929dc1492bbcc8e26 100644
+--- a/crates/ui-kit/src/panel_tests.rs
++++ b/crates/ui-kit/src/panel_tests.rs
+@@ -1762,6 +1762,46 @@ fn window_body_buttons_stay_visible_after_the_page_grows_from_nothing() {
+     }
+ }
+ 
++#[test]
++fn a_wrapping_footer_keeps_the_native_actions_at_wide_and_narrow_widths() {
++    for (width, stacked) in [(620.0, false), (180.0, true)] {
++        let ctx = crate::test_support::context();
++        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 250.0));
++        let run = |events| {
++            registry::clear_handles();
++            let mut action = Action::None;
++            raw_frame(&ctx, egui::RawInput { screen_rect: Some(screen), events, focused: true, ..Default::default() }, |ui| {
++                action = Window::new(egui::Id::unique("wrap_actions"), "update", "Update available")
++                    .cards(3.0)
++                    .actions("Install and close SolidCraft", "Remind me later", Some("Skip this version"))
++                    .wrap_actions()
++                    .show(ui.ctx(), true, |ui| {
++                        for _ in 0..30 {
++                            ui.label("Release note");
++                        }
++                    })
++                    .1;
++            });
++            action
++        };
++        for _ in 0..3 {
++            run(Vec::new());
++        }
++        let footer = registry::rect_of("dialog:footer").unwrap();
++        let targets = ["dialog:ok", "dialog:apply", "dialog:cancel"].map(|id| registry::rect_of(id).unwrap());
++        assert!(screen.contains_rect(footer), "{width}: {footer:?}");
++        assert!(targets.iter().all(|target| footer.contains_rect(*target)), "{width}: {targets:?} in {footer:?}");
++        if stacked {
++            assert!(targets.windows(2).all(|pair| pair[0].bottom() <= pair[1].top()), "{targets:?}");
++        } else {
++            assert_eq!(footer.height(), Tokens::get().form_footer_height);
++            assert!(targets.windows(2).all(|pair| pair[0].left() >= pair[1].right()), "{targets:?}");
++        }
++        assert_eq!(run(key(egui::Key::Enter)), Action::Ok);
++        assert_eq!(run(key(egui::Key::Escape)), Action::Cancel);
++    }
++}
++
+ #[test]
+ fn adjoining_compact_frames_share_one_stroke_and_only_exposed_corners_round() {
+     use crate::DockEdges;
