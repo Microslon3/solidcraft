@@ -2,26 +2,30 @@ name: SolidCraft review checks
 on:
   push:
     branches: [codex/review-checks-20290-20292]
-    paths: ['.github/workflows/review-checks.yml']
+    paths: ['.github/workflows/review-checks.yml', '20292.patch', 'base.txt', 'nav-tree.txt']
 permissions:
   contents: read
 jobs:
   verify:
-    name: PR ${{ matrix.pr }} on published head
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    name: Navigation review fix / ${{ matrix.check }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
         include:
-          - pr: 20290
-            head: 9bd24319f08dc0b65505fdc0f00462bcddd7cf3a
-          - pr: 20292
-            head: 78393d41662a95e9d4617cea50780dbaa6fc99f6
+          - os: ubuntu-24.04
+            check: Linux full gate
+          - os: ubuntu-24.04
+            check: Exact ray regressions
+          - os: windows-latest
+            check: Windows app and navigation
     env:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_CI_DEBUG: 0
       CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_GOLDENS_DEBUG: 0
+      CARGO_PROFILE_GOLDENS_INCREMENTAL: 'false'
       CARGO_BUILD_JOBS: 3
       RUST_MIN_STACK: 8388608
       NEXTEST_TEST_THREADS: 2
@@ -29,26 +33,68 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ matrix.head }}
-          fetch-depth: 2
+          path: proof
           persist-credentials: false
-      - name: Confirm the published revision and its upstream parent
-        env:
-          EXPECTED_HEAD: ${{ matrix.head }}
-          UPSTREAM_PARENT: ce021bd5178b468c745fc3f589b27247632dd7e6
+      - name: Read the upstream revision
+        id: base
+        shell: bash
+        run: echo "sha=$(cat proof/base.txt)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: tangency-labs/solidcraft
+          ref: ${{ steps.base.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - name: Verify the exact navigation source tree
+        working-directory: source
+        shell: bash
         run: |
-          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-          test "$(git rev-parse HEAD^)" = "$UPSTREAM_PARENT"
-          git diff --check HEAD^ HEAD
-          git show --oneline --stat HEAD
+          git apply --index ../proof/20292.patch
+          git diff --cached --check
+          git diff --cached --stat
+          tree=$(git write-tree)
+          echo "Git tree $tree"
+          test "$tree" = "$(cat ../proof/nav-tree.txt)"
       - name: Select the project's Rust toolchain
+        working-directory: source
         run: rustup show active-toolchain
       - name: Install Linux build and software graphics dependencies
+        if: matrix.check == 'Linux full gate'
         run: |
           sudo apt-get -qq update
           sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+          df -h .
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8
+        if: matrix.check == 'Linux full gate'
         with:
           tool: cargo-nextest@0.9.150
-      - name: Run the project's pre-commit gate on this PR head
-        run: cargo xtask fast --base HEAD^
+      - name: Run the exact-ray kernel regressions
+        if: matrix.check == 'Exact ray regressions'
+        working-directory: source/solidcore
+        run: cargo test --locked --profile goldens -p solidcore --lib first_ray_interval
+      - name: Exercise the orbit and middle-button regressions
+        if: matrix.check == 'Linux full gate'
+        working-directory: source
+        run: cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation::view_key_tests viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste
+      - name: Run the complete pre-commit gate and the query goldens
+        if: matrix.check == 'Linux full gate'
+        working-directory: source
+        run: cargo xtask fast --base HEAD --units query.api_queries,query.brep
+      - name: Build the native Windows app for the orbit captures
+        if: runner.os == 'Windows'
+        working-directory: source
+        env:
+          SOLIDCRAFT_VERSION: 0.45.0
+        run: cargo build --locked --profile ci -p solidcraft
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: runner.os == 'Windows'
+        with:
+          name: solidcraft-windows-20292
+          path: source/target/ci/solidcraft.exe
+          if-no-files-found: error
+          retention-days: 1
+      - name: Exercise native navigation and middle-button input
+        if: runner.os == 'Windows'
+        working-directory: source
+        run: >-
+          cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation:: viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste

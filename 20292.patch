@@ -1,5 +1,46 @@
+diff --git a/crates/kernel/src/body.rs b/crates/kernel/src/body.rs
+index 685c0de06688cbbb2efa6c7728208652304eea10..0d5550af0521a845fc1dad49ecfb7c1bb06494e2 100644
+--- a/crates/kernel/src/body.rs
++++ b/crates/kernel/src/body.rs
+@@ -1502,6 +1502,21 @@ impl Body {
+         record_outline(&self.record)
+     }
+ 
++    /// A box enclosing the body's exact faces, edges and vertices, using the kernel's
++    /// non-tight bounds. A mesh body's box comes from its triangles.
++    pub fn loose_bounds(&self) -> Result<Aabb3> {
++        if self.is_mesh() {
++            return Ok(self.outline_bounds());
++        }
++        if let Some(bounds) = *self.bounds.lock().unwrap_or_else(std::sync::PoisonError::into_inner) {
++            return Ok(bounds);
++        }
++        let form = self.ops_body().ok_or_else(|| KernelError::Failed("body bounds: the body has no solidcore form".into()))?;
++        let (body, _) = &*form;
++        let (lo, hi) = body.loose_bounds().map_err(|e| KernelError::smlib("body bounds", e))?;
++        Ok(Aabb3 { min: v3(lo), max: v3(hi) })
++    }
++
+     /// The exact box of the body's faces, edges and vertices (SMLib's tight box); a mesh body's
+     /// is its triangles'. Measured once per record: a boolean asks for the box of every body it
+     /// meets, and the same bodies come back feature after feature. A failure is not kept.
+@@ -2114,6 +2129,14 @@ impl Body {
+         Ok(Some(RayPick { face, edge, vertex, point, normal, depth: hit.distance }))
+     }
+ 
++    /// The first occupied B-rep interval along the unit ray within `clip`. A sheet's
++    /// nearest actual hit is a point interval. The distances are measured from `origin`.
++    pub fn first_ray_interval(&self, origin: Vec3, direction: Vec3, clip: (f64, f64), sheet: bool) -> Result<Option<(f64, f64)>> {
++        let form = self.ops_body().ok_or_else(|| KernelError::Invalid("ray interval needs an exact body".into()))?;
++        let (body, _) = &*form;
++        body.first_ray_interval(origin.into(), direction.into(), clip, sheet).map_err(|e| KernelError::smlib("ray interval", e))
++    }
++
+     /// B-rep faces (a mesh body is one face; [`crate::measure`] counts its triangles).
+     pub fn face_count(&self) -> usize {
+         if self.mesh.is_some() { 1 } else { self.record.topology().faces.len() }
 diff --git a/crates/ui-egui/src/navigation.rs b/crates/ui-egui/src/navigation.rs
-index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4de0b0a98 100644
+index 8554e9797770ff0d5cfc6767b71abf70cdc93edb..07adfe0c7ef9129cf3b2becea17076aaabd83334 100644
 --- a/crates/ui-egui/src/navigation.rs
 +++ b/crates/ui-egui/src/navigation.rs
 @@ -20,7 +20,7 @@ use solidcraft_viewport::Camera;
@@ -11,7 +52,7 @@ index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4
  
  /// What a page's camera may do.
  #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-@@ -1321,32 +1321,39 @@ pub(crate) fn device(app: &mut SolveApp, rect: Rect, caps: NavCaps) {
+@@ -1373,32 +1373,39 @@ pub(crate) fn device(app: &mut SolveApp, rect: Rect, caps: NavCaps) {
      // Off by default: the cap and bridge can pass through the model, as before. The wheel and
      // pinch keep their separate "Zoom to the cursor" preference.
      let anchor = model_zoom_anchor(app, rect, Some(rect.center()), caps.orbit);
@@ -63,7 +104,7 @@ index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4
          let (reverse, free, fov) = (app.preferences.zoom_reverse, app.preferences.free_orbit, app.view_fov());
          with_fov(&mut app.cam, fov, |cam| bridge_camera(cam, queued, height, turn, reverse, free, anchor, pivot));
          app.cam = crate::view_angles::keep_locked(app, before, app.cam);
-@@ -1399,11 +1406,18 @@ pub(crate) fn bridge_camera(
+@@ -1451,11 +1458,18 @@ pub(crate) fn bridge_camera(
      }
  }
  
@@ -83,7 +124,7 @@ index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4
  /// Reverse zoom direction is a wheel setting and leaves the cap alone: the cap's own direction is
  /// its per-axis invert, already in `motion` (#8993).
  pub(crate) fn device_camera(
-@@ -1414,7 +1428,7 @@ pub(crate) fn device_camera(
+@@ -1466,7 +1480,7 @@ pub(crate) fn device_camera(
      turn: bool,
      free_orbit: bool,
      anchor: Option<Vec3>,
@@ -92,7 +133,7 @@ index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4
  ) {
      if !(seconds > 0.0) || !seconds.is_finite() {
          return;
-@@ -1429,7 +1443,18 @@ pub(crate) fn device_camera(
+@@ -1481,7 +1495,17 @@ pub(crate) fn device_camera(
          // These are logical 3DxWare coordinates after the profile mapping: Rx is Tilt, Ry is
          // Roll and Rz is Spin. The KMJ profile swaps physical Ry/Rz for the selected navigation
          // mode, so swapping them again here would make Roll behave like Spin.
@@ -101,9 +142,8 @@ index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4
 +            let p = match pivot {
 +                DeviceOrbitPivot::Point(p) => p,
 +                DeviceOrbitPivot::ViewDepth(reference) => {
-+                    let back = cam.back();
-+                    let depth = (reference - cam.target).dot(back);
-+                    let p = cam.target + back * depth;
++                    let depth = cam.frame_coords(reference).z;
++                    let p = cam.target + cam.back() * depth;
 +                    if p.is_finite() && (cam.fov <= 0.0 || depth < cam.distance - 1e-9) { p } else { cam.target }
 +                }
 +            };
@@ -112,7 +152,7 @@ index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4
          if free_orbit {
              cam.rotate_in_view(Vec3::new(-rx, -ry, rz) * (2.0 * seconds));
          } else {
-@@ -1710,32 +1735,67 @@ fn screen_middle(app: &SolveApp, mut cam: Camera, bounds: &solidcraft_engine::ge
+@@ -1762,32 +1786,43 @@ fn screen_middle(app: &SolveApp, mut cam: Camera, bounds: &solidcraft_engine::ge
      at.is_finite().then_some(at)
  }
  
@@ -138,28 +178,28 @@ index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4
 +    view_pivot_at(app, &projection(app, rect), middle)
 +}
 +
-+/// Keep the screen point and use the camera target's depth if its plane meets the nearest
-+/// body's box on that ray. When the target is far away, turn about the body instead (#20257).
-+/// A ray that misses every visible body keeps the target's depth.
++/// Keep the screen point and use the camera target's depth if it is within the first material
++/// the ray meets. When the target is far away, turn about that material instead (#20257).
++/// A ray that misses the displayed geometry keeps the target's depth.
 +fn view_pivot_at(app: &SolveApp, proj: &Proj, at: Pos2) -> Option<Vec3> {
 +    if !at.is_finite() {
          return None;
      }
 -    let proj = projection(app, rect);
 -    let (origin, dir) = proj.ray(middle);
+-    let back = proj.cam.back();
+-    let along = dir.dot(back);
 +    let centre = proj.rect.center();
 +    let centred = at.distance(centre) < 0.5;
-+    // An orthographic picking ray starts in front of the scene even after a large depth shift.
-+    let (origin, dir) = proj.ray(if centred { centre } else { at });
-     let back = proj.cam.back();
-     let along = dir.dot(back);
++    let (origin, dir, material) = crate::view_pick::orbit_ray(app, proj, if centred { centre } else { at });
++    let along = dir.dot(proj.cam.back());
      if along.abs() < 1e-9 {
          return None;
      }
 -    let p = origin + dir * ((proj.cam.target - origin).dot(back) / along);
 -    p.is_finite().then_some(p)
-+    let target = (proj.cam.target - origin).dot(back) / along;
-+    let depth = match view_body_interval(app, origin, dir) {
++    let target = -proj.cam.frame_coords(origin).z / along;
++    let depth = match material {
 +        Some((near, far)) if !(near..=far).contains(&target) => f64::midpoint(near, far),
 +        _ => target,
 +    };
@@ -169,32 +209,10 @@ index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4
 +    }
 +    let pivot = origin + dir * depth;
 +    pivot.is_finite().then_some(pivot)
-+}
-+
-+/// Where the ray enters and leaves the nearest visible body's box. Use the viewport's cached
-+/// hierarchy: neither the other bodies in view nor the geometry behind the subject set its depth.
-+fn view_body_interval(app: &SolveApp, origin: Vec3, dir: Vec3) -> Option<(f64, f64)> {
-+    use crate::viewport::{body_bounds, body_tree, ray_box};
-+
-+    let boxes = body_bounds(app, &crate::open_meshing::shown_world(app));
-+    let entry = |bounds: &solidcraft_engine::geom::Aabb3| ray_box(origin, dir, bounds, 0.0).filter(|t| t.is_finite());
-+    body_tree(app, &boxes)
-+        .candidates(&boxes, |bounds| entry(bounds).is_some())
-+        .into_iter()
-+        .filter_map(|index| {
-+            let (name, bounds) = boxes.get(index)?;
-+            if bounds.is_empty() || !app.session.body_visible(name) {
-+                return None;
-+            }
-+            let near = entry(bounds)?.max(0.0);
-+            let far = -ray_box(origin, -dir, bounds, 0.0)?;
-+            (far.is_finite() && near <= far).then_some((near, far))
-+        })
-+        .min_by(|a, b| a.0.total_cmp(&b.0))
  }
  
  /// An orbit drag so far: the camera it began with, its total turn since (the pointer's motion,
-@@ -4638,6 +4698,122 @@ mod view_key_tests {
+@@ -4690,6 +4725,205 @@ mod view_key_tests {
          }
      }
  
@@ -278,7 +296,90 @@ index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4
 +
 +        let proj = projection(&h.app, rect);
 +        let over_empty_space = view_pivot_at(&h.app, &proj, rect.right_top()).expect("a ray over empty space uses the target depth");
-+        assert!((over_empty_space - proj.cam.target).dot(proj.cam.back()).abs() < 1e-6);
++        assert!(proj.cam.frame_coords(over_empty_space).z.abs() < 1e-6);
++    }
++
++    #[test]
++    fn view_centre_orbit_looks_through_a_hole_to_the_aligned_part() {
++        use super::*;
++        let mut h = Harness::new();
++        h.app.home.open = false;
++        h.app.ui.perspective = false;
++        h.app.preferences.orbit_around = OrbitAround::ViewCentre;
++        for params in [
++            json!({"length": 120, "width": 8, "height": 120, "corner": [-60, -4, -60], "body_name": "Frame"}),
++            json!({"length": 50, "width": 16, "height": 50, "corner": [-25, -8, -25], "operation": "cut", "targets": ["Frame"]}),
++            json!({"length": 20, "width": 20, "height": 20, "corner": [-10, 4990, -10], "body_name": "Cube"}),
++        ] {
++            h.app.run("solid.box", params).unwrap();
++        }
++        h.settle();
++        let rect = h.app.viewport.rect.expect("the viewport");
++        let subject = Vec3::new(0.0, 5000.0, 0.0);
++        h.app.cam = Camera { target: subject, yaw: 0.0, pitch: 0.0, ..Camera::default() };
++        let middle = home_centre(&h.app).expect("the free view's middle");
++        let screen = |app: &SolveApp| projection(app, rect).to_screen(subject).expect("the cube centre projects");
++        let shift = middle - screen(&h.app);
++        h.app.cam.pan(f64::from(shift.x), f64::from(shift.y), f64::from(rect.height()));
++        let aligned = h.app.cam;
++        let before = screen(&h.app);
++        assert!(before.distance(middle) < 0.1, "the cube and the hole surround the orbit point");
++        orbit(&mut h.app, rect, 25.0, 0.0, None);
++        assert!(h.app.cam.yaw.abs() > 0.05, "the orbit turns");
++        assert!(screen(&h.app).distance(before) < 0.5, "the foreground hole must not swing the background cube away");
++
++        h.app.cam = aligned;
++        h.app.session.visibility.hidden_bodies.push("Cube".into());
++        let proj = projection(&h.app, rect);
++        let pivot = view_pivot_at(&h.app, &proj, middle).unwrap_or(proj.cam.target);
++        assert!(proj.cam.frame_coords(pivot).z.abs() < 1e-6, "with only the empty hole, use the target plane: {pivot:?}");
++    }
++
++    #[test]
++    fn view_centre_pivot_uses_the_first_occupied_interval_that_the_section_keeps() {
++        use super::*;
++        let mut h = Harness::new();
++        h.app.home.open = false;
++        h.app.ui.perspective = false;
++        h.app.run("solid.box", json!({"length": 20, "width": 20, "height": 20, "corner": [-10, -10, -10], "body_name": "Box"})).unwrap();
++        h.app
++            .run("solid.box", json!({"length": 10, "width": 10, "height": 10, "corner": [-5, -5, -5], "operation": "cut", "targets": ["Box"]}))
++            .unwrap();
++        h.settle();
++        let rect = h.app.viewport.rect.expect("the viewport");
++        h.app.cam = Camera { yaw: 0.0, pitch: 0.0, ..Camera::default() };
++        let assert_pivot = |app: &SolveApp, y: f64| {
++            let proj = projection(app, rect);
++            let pivot = view_pivot_at(app, &proj, rect.center()).expect("the ray crosses material");
++            assert!(pivot.dist(Vec3::new(0.0, y, 0.0)) < 1e-6, "expected y={y}, got {pivot:?}");
++        };
++        // The target is in the void, with material on each side.
++        assert_pivot(&h.app, -7.5);
++        h.app.run("inspect.section", json!({"plane": {"origin": [0, 0, 0], "normal": [0, -1, 0]}})).unwrap();
++        assert_pivot(&h.app, 7.5);
++        // With the cut cap inside the back wall, the visible interval begins at the cut plane.
++        h.app.run("inspect.section", json!({"plane": {"origin": [0, 8, 0], "normal": [0, -1, 0]}})).unwrap();
++        assert_pivot(&h.app, 9.0);
++    }
++
++    #[test]
++    fn view_centre_pivot_sees_a_hidden_source_while_editing_its_face_extrusion() {
++        use super::*;
++        let mut h = Harness::new();
++        h.app.home.open = false;
++        h.app.ui.perspective = false;
++        h.app.run("solid.box", json!({"length": 10, "width": 10, "height": 10, "body_name": "Source"})).unwrap();
++        h.app.run("solid.extrude", json!({"face": [5, 5, 10], "face_body": "Source", "distance": 5, "operation": "new", "name": "Depth"})).unwrap();
++        h.app.session.visibility.hidden_bodies.push("Source".into());
++        h.call("ui.editFeature", json!({"feature": "Depth"}));
++        assert!(h.app.dialog.is_some());
++        assert!(h.app.body_visible("Source"));
++        assert!(!h.app.session.body_visible("Source"));
++        let rect = h.app.viewport.rect.expect("the viewport");
++        h.app.cam = Camera { target: Vec3::new(5.0, 5000.0, 5.0), yaw: 0.0, pitch: 0.0, ..Camera::default() };
++        let proj = projection(&h.app, rect);
++        let pivot = view_pivot_at(&h.app, &proj, rect.center()).expect("the temporarily displayed source anchors the orbit");
++        assert!(pivot.dist(Vec3::new(5.0, 5.0, 5.0)) < 1e-6, "{pivot:?}");
 +    }
 +
 +    #[test]
@@ -317,3 +418,495 @@ index 3f211c4e470bb4182c3a447b9f83f09e0f7dc669..4fd9e0372da9c7c0307c69e9dd65c5d4
      /// #16628: in perspective, zooming in never collapses the eye onto the target, and the target stays
      /// near the model, for a run of wheel steps at the centre and for a seeded mix of orbit, scroll and pinch.
      #[test]
+diff --git a/crates/ui-egui/src/view_pick.rs b/crates/ui-egui/src/view_pick.rs
+index 21a44e7afe2d3e2942bbcae1b0c786066d18a865..23bd987e5aba90910af764efb1eeb0e9475f1bce 100644
+--- a/crates/ui-egui/src/view_pick.rs
++++ b/crates/ui-egui/src/view_pick.rs
+@@ -268,6 +268,94 @@ fn face_candidates(
+     out
+ }
+ 
++/// The orbit's window ray and its first visible material interval (distances from the origin).
++/// The orthographic ray starts in front of the conservative bounds, including any curved
++/// surface that reaches past the display mesh.
++pub(crate) fn orbit_ray(app: &SolveApp, proj: &crate::viewport::Proj, at: egui::Pos2) -> (Vec3, Vec3, Option<(f64, f64)>) {
++    let state = crate::open_meshing::shown_world(app);
++    let (boxes, tree) = crate::viewport::orbit_body_bounds(app, &state);
++    let scene = tree.union;
++    let bounds = if !scene.is_empty() && scene.min.is_finite() && scene.max.is_finite() {
++        Some(proj.bounds.map_or(scene, |b| b.union(&scene)))
++    } else {
++        proj.bounds
++    };
++    let (origin, dir) = crate::viewport::Proj { bounds, ..*proj }.ray(at);
++    (origin, dir, visible_body_interval(app, &state, &boxes, &tree, origin, dir))
++}
++
++/// The hierarchy only rules out candidates. Each solid answers from its trimmed B-rep,
++/// and a mesh body from its own triangles.
++fn visible_body_interval(
++    app: &SolveApp,
++    state: &solidcraft_engine::doc::ModelState,
++    boxes: &[(String, solidcraft_engine::geom::Aabb3)],
++    tree: &crate::viewport::BodyTree,
++    origin: Vec3,
++    dir: Vec3,
++) -> Option<(f64, f64)> {
++    use crate::viewport::{frame_ghosted, ray_box, section_planes};
++
++    let ((near, far), _) = section_ray_interval(&section_planes(app), origin, dir)?;
++    let clip = (near.max(0.0), far);
++    if clip.0 >= clip.1 {
++        return None;
++    }
++    let entry = |bounds: &solidcraft_engine::geom::Aabb3| {
++        if bounds.is_empty() || !bounds.min.is_finite() || !bounds.max.is_finite() {
++            return Some(clip.0);
++        }
++        let pad = bounds.diagonal() * 1e-6 + 1e-9;
++        let near = ray_box(origin, dir, bounds, pad)?.max(clip.0);
++        let far = -ray_box(origin, -dir, bounds, pad)?;
++        (near.is_finite() && near <= far.min(clip.1)).then_some(near)
++    };
++    let replaced = app.preview.effective_replaced();
++    let mut candidates: Vec<_> = tree
++        .candidates(boxes, |bounds| entry(bounds).is_some())
++        .into_iter()
++        .filter_map(|i| {
++            let body = state.bodies.get(i)?;
++            if !app.body_visible(&body.name) || replaced.contains(&body.name) || frame_ghosted(app, body) {
++                return None;
++            }
++            Some((entry(&boxes.get(i)?.1)?, body))
++        })
++        .collect();
++    candidates.sort_by(|a, b| a.0.total_cmp(&b.0));
++    let mut closest = None;
++    for (lower_bound, body) in candidates {
++        if closest.is_some_and(|(near, _)| lower_bound > near) {
++            break;
++        }
++        let interval = if body.body.is_mesh() {
++            let mesh_hit = mesh_hit_in_clip(app, body, origin, dir, clip);
++            mesh_hit.map(|t| (t, t))
++        } else {
++            let Ok(interval) = solidcraft_engine::kernel::guard("orbit depth", || body.body.first_ray_interval(origin, dir, clip, body.is_surface()))
++            else {
++                continue;
++            };
++            interval
++        };
++        if let Some(interval) = interval
++            && closest.is_none_or(|(near, _)| interval.0 < near)
++        {
++            closest = Some(interval);
++        }
++    }
++    closest
++}
++
++/// The nearest displayed triangle in the kept part of the ray, using the mesh's own index.
++fn mesh_hit_in_clip(app: &SolveApp, body: &solidcraft_engine::doc::ModelBody, origin: Vec3, dir: Vec3, clip: (f64, f64)) -> Option<f64> {
++    let (mesh, place) = body.mesh_in_place();
++    let (local_origin, local_dir) = crate::viewport::local_ray(&place, origin + dir * clip.0, dir)?;
++    let (t, _) = crate::pick_index::raycast(app.viewport.pick_index.of(&mesh).as_deref(), &mesh, local_origin, local_dir)?;
++    let depth = t + clip.0;
++    (depth <= clip.1).then_some(depth)
++}
++
+ /// The hit point and outward surface normal in world space. A flat face (constant mesh
+ /// normals) is solved exactly against its plane, so a box picks to the last digit; a curved
+ /// face keeps the mesh hit (within the display tolerance) and takes its normal interpolated
+@@ -330,6 +418,12 @@ pub(crate) fn section_keeps(planes: &[SectionPlane], p: Vec3) -> bool {
+ /// Where the ray `o + d·t` comes into what the section keeps (inside every plane) ahead of `o`:
+ /// `t` and the index of the plane it comes in through, where its cut face is.
+ pub(crate) fn section_entry(planes: &[SectionPlane], o: Vec3, d: Vec3) -> Option<(f64, usize)> {
++    let ((lo, hi), entry_plane) = section_ray_interval(planes, o, d)?;
++    (lo > 0.0 && lo < hi).then_some((lo, entry_plane?))
++}
++
++/// Where the section keeps the ray, and which plane it enters through if there is one.
++fn section_ray_interval(planes: &[SectionPlane], o: Vec3, d: Vec3) -> Option<((f64, f64), Option<usize>)> {
+     let (mut lo, mut hi, mut through) = (f64::NEG_INFINITY, f64::INFINITY, None);
+     for (i, c) in planes.iter().enumerate() {
+         // n·(o + d·t) <= n·origin: t·dn <= s.
+@@ -344,8 +438,7 @@ pub(crate) fn section_entry(planes: &[SectionPlane], o: Vec3, d: Vec3) -> Option
+             (lo, through) = (s / dn, Some(i));
+         }
+     }
+-    let i = through?;
+-    (lo > 0.0 && lo < hi).then_some((lo, i))
++    (lo <= hi).then_some(((lo, hi), through))
+ }
+ 
+ /// A cut cap under a pick: where, in which body, and the plane it is a cut face of.
+diff --git a/crates/ui-egui/src/viewport.rs b/crates/ui-egui/src/viewport.rs
+index abcdac12d943539b8c6103638c7ec2a057501490..7338e93358f411b3468c9cb9ccc549d56cbb0026 100644
+--- a/crates/ui-egui/src/viewport.rs
++++ b/crates/ui-egui/src/viewport.rs
+@@ -178,6 +178,8 @@ pub struct ViewportState {
+     pick_bounds: std::sync::Mutex<Option<BodyBounds>>,
+     /// The boxes in `pick_bounds` as a whole ([`body_tree`]), held with them.
+     body_tree: std::sync::Mutex<Option<(BodyBoxes, std::sync::Arc<BodyTree>)>>,
++    /// The conservative geometry boxes used by orbit depth queries, held with their world.
++    orbit_body_bounds: std::sync::Mutex<Option<OrbitBodyBounds>>,
+     /// What the refinement reads of each body of one world state that does not change with the
+     /// view ([`lod_bodies`]), held with the state as `pick_bounds` is.
+     lod_bodies: std::sync::Mutex<Option<(std::sync::Arc<solidcraft_engine::doc::ModelState>, std::sync::Arc<LodBodies>)>>,
+@@ -4050,6 +4052,7 @@ fn known_body_bounds(app: &SolveApp, st: &std::sync::Arc<solidcraft_engine::doc:
+ type BodyBounds = (std::sync::Arc<solidcraft_engine::doc::ModelState>, BodyBoxes);
+ 
+ type BodyBoxes = std::sync::Arc<Vec<(String, solidcraft_engine::geom::Aabb3)>>;
++type OrbitBodyBounds = (std::sync::Arc<solidcraft_engine::doc::ModelState>, BodyBoxes, std::sync::Arc<BodyTree>);
+ 
+ /// The bodies' boxes of one world state taken together: the box around them all, and a
+ /// hierarchy over them for rays. Every frame asks for the model's extent several times and casts
+@@ -4106,6 +4109,38 @@ pub(crate) fn body_tree(app: &SolveApp, boxes: &BodyBoxes) -> std::sync::Arc<Bod
+     std::sync::Arc::new(BodyTree::new(boxes))
+ }
+ 
++/// A hierarchy of conservative body boxes for exact orbit depth. Keep it with the world so
++/// holding a device's cap does not rebuild it. An unknown box stays in the hierarchy's loose list.
++pub(crate) fn orbit_body_bounds(app: &SolveApp, state: &std::sync::Arc<solidcraft_engine::doc::ModelState>) -> (BodyBoxes, std::sync::Arc<BodyTree>) {
++    let build = || {
++        let boxes: BodyBoxes = std::sync::Arc::new(
++            state
++                .bodies
++                .iter()
++                .map(|b| {
++                    let bounds = if b.body.is_mesh() {
++                        b.mesh_bounds()
++                    } else {
++                        solidcraft_engine::kernel::guard("orbit bounds", || b.body.loose_bounds()).unwrap_or(solidcraft_engine::geom::Aabb3::EMPTY)
++                    };
++                    (b.name.clone(), bounds)
++                })
++                .collect(),
++        );
++        let tree = std::sync::Arc::new(BodyTree::new(&boxes));
++        (boxes, tree)
++    };
++    let Ok(mut cache) = app.viewport.orbit_body_bounds.lock() else { return build() };
++    if let Some((world, boxes, tree)) = cache.as_ref()
++        && std::sync::Arc::ptr_eq(world, state)
++    {
++        return (boxes.clone(), tree.clone());
++    }
++    let (boxes, tree) = build();
++    *cache = Some((state.clone(), boxes.clone(), tree.clone()));
++    (boxes, tree)
++}
++
+ /// The model's extent: bodies (from the cached boxes) and sketches.
+ pub fn model_bounds(app: &SolveApp) -> solidcraft_engine::geom::Aabb3 {
+     let st = crate::open_meshing::shown_world(app);
+diff --git a/solidcore/crates/solidcore-ops/src/measure.rs b/solidcore/crates/solidcore-ops/src/measure.rs
+index 1ad689910c936dc919d5b4685b87d890c3a3916f..1e073a3dde85f3640c53dda6f2d7f4d1038048be 100644
+--- a/solidcore/crates/solidcore-ops/src/measure.rs
++++ b/solidcore/crates/solidcore-ops/src/measure.rs
+@@ -58,6 +58,15 @@ pub struct SquareFaceLevel {
+     pub tolerance: f64,
+ }
+ 
++fn box_corners(x: Extent3d) -> Result<([f64; 3], [f64; 3])> {
++    let (lo, hi) = (array(x.min()), array(x.max()));
++    let finite = lo.iter().chain(&hi).all(|v| v.is_finite());
++    if !finite || lo.iter().zip(&hi).any(|(a, b)| a > b) {
++        return Err(Error::Status(crate::error::INVALID_INPUT));
++    }
++    Ok((lo, hi))
++}
++
+ fn array(v: Vec3) -> [f64; 3] {
+     [v.x, v.y, v.z]
+ }
+@@ -545,13 +554,20 @@ impl Body {
+     /// The kernel's error; [`Error::Status`] `SM_ERR_INVALID_INPUT` for no box (not finite, or
+     /// its corners out of order).
+     pub fn bounds(&self) -> Result<([f64; 3], [f64; 3])> {
+-        let x = with_body("bounds", self, |k, b| brep_bounding_box(k, b, true))?;
+-        let (lo, hi) = (array(x.min()), array(x.max()));
+-        let finite = lo.iter().chain(&hi).all(|v| v.is_finite());
+-        if !finite || lo.iter().zip(&hi).any(|(a, b)| a > b) {
+-            return Err(Error::Status(crate::error::INVALID_INPUT));
+-        }
+-        Ok((lo, hi))
++        box_corners(with_body("bounds", self, |k, b| {
++            brep_bounding_box(k, b, true)
++        })?)
++    }
++
++    /// A conservative axis-aligned box of the vertices, edges and faces with their modeling
++    /// tolerances. Uses the kernel's non-tight box without solving the exact extrema.
++    ///
++    /// # Errors
++    /// The kernel's error, or an undefined or non-finite box.
++    pub fn loose_bounds(&self) -> Result<([f64; 3], [f64; 3])> {
++        box_corners(read_body("loose_bounds", self, |k, b| {
++            brep_bounding_box(k, b, false)
++        })?)
+     }
+ 
+     /// The samples of the kernel's edge/face gap for record edge `edge` and record face `face`
+@@ -744,6 +760,24 @@ impl Body {
+         }))
+     }
+ 
++    /// The first material interval, or the first trimmed sheet hit, along a unit ray
++    /// restricted to `clip`. Both endpoints are distances from the ray's origin.
++    ///
++    /// # Errors
++    /// Invalid ray or clipping interval, or the kernel's query error.
++    pub fn first_ray_interval(
++        &self,
++        origin: [f64; 3],
++        direction: [f64; 3],
++        clip: (f64, f64),
++        sheet: bool,
++    ) -> Result<Option<(f64, f64)>> {
++        let ray = Ray::new(point(origin)?, point(direction)?).map_err(|_| Error::Argument)?;
++        with_body("first_ray_interval", self, |k, b| {
++            BrepQuery::of_brep(b).first_ray_interval(k, b, ray, clip, sheet)
++        })
++    }
++
+     /// Record edge `edge`'s curve over the edge's own interval, copied out of the body to measure
+     /// against faces and edges of this or another body ([`Body::closest_to_curve`]).
+     ///
+diff --git a/solidcore/crates/solidcore/src/query/api_queries.rs b/solidcore/crates/solidcore/src/query/api_queries.rs
+index f61e84c3ff3ef195562d02f71590b8430757ba3c..a5f7cd4d8f9bb4d400d4c33514a1d3406b846bbf 100644
+--- a/solidcore/crates/solidcore/src/query/api_queries.rs
++++ b/solidcore/crates/solidcore/src/query/api_queries.rs
+@@ -482,7 +482,7 @@ fn brep_vertices(brep: &Brep) -> Result<Vec<VertexId>> {
+ /// SM_SR_ALL, tolerance, SM_BIG_DOUBLE, NULL)` through the caller's objects: every
+ /// solution's start parameter, and its end parameter for a range of values, in solution
+ /// order.
+-fn target_curve_crossings<O: SolutionObject>(
++pub(super) fn target_curve_crossings<O: SolutionObject>(
+     k: &Kernel,
+     objects: &dyn TopologyObjects<O>,
+     target: O,
+diff --git a/solidcore/crates/solidcore/src/query/brep.rs b/solidcore/crates/solidcore/src/query/brep.rs
+index d8ca3579ced067fdbcced0d110071ad238228619..413a9a484b9c5ee8d6d58aeca77a43b4691605e0 100644
+--- a/solidcore/crates/solidcore/src/query/brep.rs
++++ b/solidcore/crates/solidcore/src/query/brep.rs
+@@ -92,20 +92,24 @@ pub use ray::{
+ 
+ use core::cell::OnceCell;
+ 
++use crate::curve::curve::Curve;
++use crate::curve::line::Line;
+ use crate::error::{native_failure, EntityRef, Result, SolidError};
+ use crate::geom::attribute::{Attribute, AttributeValue, Behavior};
+-use crate::geom::extent3d::Extent3d;
++use crate::geom::extent3d::{Extent3d, LineHit};
+ use crate::geom::global_solver::{SolutionRequested, SolverOperation};
+ use crate::geom::object::ObjectRef;
+ use crate::geom::solution_array::Solution;
+ use crate::geom::tol::{brep_zone_tol_3d, SmallTopoType};
+ use crate::intersect::point_class::{PointClassType, PointClassification};
+-use crate::intersect::topology_solver::p1::TopologySolver;
++use crate::intersect::topology_solver::p1::{CurveRef, TopologySolver};
+ use crate::intersect::topology_solver::p2::TopologySolveOptions;
+ use crate::kernel::Kernel;
++use crate::mass::integrator::properties::region_material;
+ use crate::math::{Point2, Point3, Vec3, BIG_DOUBLE, EFF_ZERO};
+ use crate::nurbs::b_spline_curve::BoundingBoxRequest;
+ use crate::nurbs::knots::Side;
++use crate::query::api_queries::target_curve_crossings;
+ use crate::query::edge as qe;
+ use crate::query::face::{p1 as qf1, p3 as qf3};
+ use crate::surface::surface::Surface;
+@@ -806,6 +810,112 @@ impl<'a> BrepQuery<'a> {
+         }))
+     }
+ 
++    /// The first material interval along a ray limited to `clip`, as distances from its
++    /// origin. For a sheet, returns its first trimmed boundary hit as a point interval.
++    /// A tangent hit on a solid does not enclose any material.
++    ///
++    /// # Errors
++    ///
++    /// An invalid clip interval, or errors from the box, the trimmed line intersections or
++    /// the point classifications.
++    pub fn first_ray_interval(
++        &self,
++        k: &Kernel,
++        b: &mut Brep,
++        ray: Ray,
++        clip: (f64, f64),
++        sheet: bool,
++    ) -> Result<Option<(f64, f64)>> {
++        if !(clip.0.is_finite() && clip.0 >= 0.0 && clip.0 <= clip.1) {
++            return Err(SolidError::invalid_input(
++                "query::brep::BrepQuery::first_ray_interval",
++                "an invalid clipping interval",
++            ));
++        }
++        let tolerance = brep_zone_tol_3d(k, b, SmallTopoType::NormalSize);
++        let mut bounds = self.bounding_box(k, b)?;
++        bounds.expand_absolute(tolerance);
++        let LineHit::Through { enter, exit } = bounds.intersect_line(ray.origin, ray.direction)?
++        else {
++            return Ok(None);
++        };
++        let enter = enter.max(0.0);
++        if exit <= enter || exit < clip.0 || enter > clip.1 {
++            return Ok(None);
++        }
++        let at = |distance| ray.origin + distance * ray.direction;
++        let line = Curve::from(Line::from_points(at(enter), at(exit), 3));
++        let domain = line.natural_interval();
++        if domain.length() <= 0.0 {
++            return Ok(None);
++        }
++        let crossings = {
++            let identity = self.effective_identity();
++            let cache = self.cache(k, b)?;
++            let objects = LiveBrepObjects::new(b, &identity, Some(cache))?;
++            let handle = CacheObject::Other(ObjectRef {
++                type_code: Line::TYPE,
++                key: ObjectKey(0),
++            });
++            target_curve_crossings(
++                k,
++                &objects,
++                CacheObject::Brep,
++                CurveRef {
++                    curve: &line,
++                    handle,
++                },
++                &domain,
++                tolerance,
++            )?
++        };
++        let distance = |parameter: f64| {
++            let fraction = (domain.clamp_value(parameter) - domain.min()) / domain.length();
++            fraction.mul_add(exit - enter, enter)
++        };
++        let hits = crossings.into_iter().map(distance);
++        if sheet {
++            let first = hits
++                .filter(|t| (clip.0..=clip.1).contains(t))
++                .min_by(f64::total_cmp);
++            return Ok(first.map(|t| (t, t)));
++        }
++
++        // Trimmed crossings partition the line into intervals of constant material class.
++        // Several topological entities at one crossing may report it within the zone tolerance.
++        let mut hits: Vec<_> = hits.collect();
++        hits.sort_by(f64::total_cmp);
++        hits.dedup_by(|a, b| (*a - *b).abs() <= tolerance);
++        // Include the ray start when it is inside material. The padded far end is outside
++        // the body, so a material interval always ends at a crossing before that end.
++        let mut previous = enter;
++        let mut first = None;
++        for far in hits {
++            let near = previous;
++            previous = far;
++            if near >= clip.1 {
++                break;
++            }
++            if far <= clip.0 || near >= far {
++                continue;
++            }
++            // Classify before clipping, even where the section keeps only a thin sliver.
++            let midpoint = at(near + (far - near) * 0.5);
++            let class = self.point_3d_classify(k, b, midpoint, tolerance, true)?;
++            let material = match class.object() {
++                Some(EntityRef::Region(region)) => region_material(b, region)?,
++                _ => false,
++            };
++            if material {
++                let start = first.map_or(near.max(clip.0), |(start, _)| start);
++                first = Some((start, far.min(clip.1)));
++            } else if first.is_some() {
++                break;
++            }
++        }
++        Ok(first)
++    }
++
+     /// `SmBrep::Point3DClassify`: classifies `point` (zone tolerance
+     /// `point_zone_tol_3d`) against `b`, the B-rep this query was built for. With
+     /// `do_boundary_intersections` the lowest dimensional vertex, edge or face the point
+@@ -1683,6 +1793,79 @@ mod tests {
+         )));
+     }
+ 
++    #[test]
++    fn first_ray_interval_solves_both_curved_crossings_and_clips_material() {
++        let mut k = Kernel {
++            fixes: crate::kernel::UpstreamFixes::all(),
++            ..Kernel::default()
++        };
++        let mut body =
++            crate::primitive::api_primitives::create_cylinder(&mut k, Point3::ZERO, 5.0, 20.0)
++                .unwrap();
++        let query = BrepQuery::of_brep(&body);
++        let mut interval = |x, y, clip| {
++            let ray = Ray::new(Point3::new(x, y, 10.0), Vec3::new(4.0, 0.0, 0.0)).unwrap();
++            query
++                .first_ray_interval(&k, &mut body, ray, clip, false)
++                .unwrap()
++        };
++        let full = (0.0, f64::INFINITY);
++        // At y = 3 the cylinder walls are at x = ±4. The answers are distances, even
++        // though the input direction and the line's natural parameter are not distances.
++        for (x, clip, expected) in [
++            (-20.0, full, (16.0, 24.0)),
++            (-20.0, (17.0, 23.0), (17.0, 23.0)),
++            (0.0, full, (0.0, 4.0)),
++        ] {
++            let found = interval(x, 3.0, clip).unwrap();
++            assert!(
++                (found.0 - expected.0).abs() < 1e-7 && (found.1 - expected.1).abs() < 1e-7,
++                "{found:?}, expected {expected:?}"
++            );
++        }
++        assert_eq!(
++            interval(-20.0, 3.0, (25.0, 30.0)),
++            None,
++            "the section removes all material"
++        );
++        assert_eq!(
++            interval(-20.0, 5.0, full),
++            None,
++            "tangency encloses no material"
++        );
++    }
++
++    #[test]
++    fn first_ray_interval_on_a_sheet_is_a_clipped_surface_hit() {
++        let mut k = Kernel {
++            fixes: crate::kernel::UpstreamFixes::all(),
++            ..Kernel::default()
++        };
++        let mut sheet = crate::primitive::api_primitives::create_plane(
++            &mut k,
++            Point3::new(0.0, 0.0, 3.0),
++            2.0,
++            2.0,
++        )
++        .unwrap();
++        let query = BrepQuery::of_brep(&sheet);
++        let ray = Ray::new(Point3::new(1.0, 1.0, 0.0), Vec3::new(0.0, 0.0, 1.0)).unwrap();
++        let found = query
++            .first_ray_interval(&k, &mut sheet, ray, (1.0, 4.0), true)
++            .unwrap()
++            .unwrap();
++        assert!(
++            (found.0 - 3.0).abs() < 1e-7 && found.0 == found.1,
++            "{found:?}"
++        );
++        assert_eq!(
++            query
++                .first_ray_interval(&k, &mut sheet, ray, (4.0, 7.0), true)
++                .unwrap(),
++            None
++        );
++    }
++
+     /// A ray's direction is made unit whatever its finite length: (1e200, 0, 0), whose squared
+     /// length overflows, is the unit +x; one shorter than `EFF_ZERO`, such as (1e-200, 0, 0) or
+     /// (1e-13, 0, 0), is refused, while (2e-12, 0, 0) is a ray along +x.
