@@ -257,7 +257,7 @@ index ae08e103b..1653b94f9 100644
 +    Ok(Some((result, history)))
 +}
 diff --git a/solidcore/crates/solidcore/src/blend/feature_executive.rs b/solidcore/crates/solidcore/src/blend/feature_executive.rs
-index a08202da7..bc79178f8 100644
+index a08202da7..b987bb43c 100644
 --- a/solidcore/crates/solidcore/src/blend/feature_executive.rs
 +++ b/solidcore/crates/solidcore/src/blend/feature_executive.rs
 @@ -110,6 +110,8 @@ use crate::topology::face::p3::{FaceBreps, FaceIntersectOptions, IntersectObject
@@ -291,44 +291,45 @@ index a08202da7..bc79178f8 100644
      /// `GetFeatures`, mutably (for the per-feature setters).
      pub fn features_mut(&mut self) -> &mut [Feature] {
          &mut self.features
-@@ -652,6 +669,21 @@ impl<'a> FeatureExecutive<'a> {
+@@ -647,11 +664,25 @@ impl<'a> FeatureExecutive<'a> {
+     /// [`Self::do_defeature`]'s work on the base, which the caller puts back on any error.
+     fn take_off(&mut self, k: &mut Kernel) -> Result<Vec<KeptFeature>> {
+         let mut kept: Vec<KeptFeature> = Vec::new();
++        let mut untouched = Vec::new();
+         let mut off = 0;
+         for i in 0..self.features.len() {
              let Some(feature) = self.features.get_mut(i) else {
                  continue;
              };
 +            if let Some(closure) = annular::Closure::of(k, self.base, feature)? {
-+                let mut patch = closure.patch(k, self.base.tolerance())?;
-+                if let Some(face) = closure.obstruction(k, self.base, &feature.faces, &mut patch)? {
++                if let Some(limit) = closure.remove(k, self.base, feature, &mut self.patches)? {
++                    untouched.push(i);
 +                    kept.push(KeptFeature {
 +                        feature: i,
 +                        open_loop: open_loop_edge(feature),
-+                        limit: Some(DefeatureFailure::PatchIntersectsFace { face }),
++                        limit: Some(limit),
 +                    });
-+                    continue;
++                } else {
++                    off += 1;
 +                }
-+                partition_feature(k, self.base, feature)?;
-+                closure.apply(k, self.base, feature, patch, &mut self.patches)?;
-+                off += 1;
 +                continue;
 +            }
              keep_unported(partition_feature(k, self.base, feature))?;
              keep_unported(build_patches(k, self.base, feature, &mut self.patches))?;
              // `build_patches` marks the feature rebuilt before it refuses an unpartitioned
-@@ -696,6 +728,14 @@ impl<'a> FeatureExecutive<'a> {
+@@ -696,6 +727,11 @@ impl<'a> FeatureExecutive<'a> {
              let Some(feature) = self.features.get_mut(f.feature) else {
                  return Err(refusal);
              };
-+            // Obstructions are found on the intact body, so this feature is already
-+            // in place. Other unpartitioned failures still require rollback.
-+            if !feature.is_partitioned
-+                && matches!(f.limit, Some(DefeatureFailure::PatchIntersectsFace { .. }))
-+            {
++            // An obstructed joint patch left its source feature intact.
++            if untouched.contains(&f.feature) {
 +                self.features.remove(f.feature);
 +                continue;
 +            }
              match restore_feature(k, self.base, feature) {
                  Ok(()) => {
                      self.features.remove(f.feature);
-@@ -1803,6 +1843,19 @@ fn planar_cap_rebuild(k: &mut Kernel, patch: &mut Brep, loop_curves: &[LoopCurve
+@@ -1803,6 +1839,19 @@ fn planar_cap_rebuild(k: &mut Kernel, patch: &mut Brep, loop_curves: &[LoopCurve
      Ok(())
  }
  
@@ -348,7 +349,7 @@ index a08202da7..bc79178f8 100644
  /// `SmFeatureExecutive::ExtSurfaceRebuild`: for each source face along the loop edges
  /// a patch face: the face itself with its loop-edge inner loop as outer loop when the
  /// loop edges are not on its outer loop, else its surface extended by `ext_dist` (or
-@@ -1830,17 +1883,7 @@ fn ext_surface_rebuild(
+@@ -1830,17 +1879,7 @@ fn ext_surface_rebuild(
      }
  
      // Set the distance to extend surfaces
@@ -369,10 +370,10 @@ index a08202da7..bc79178f8 100644
          // make a brep for the new face
 diff --git a/solidcore/crates/solidcore/src/blend/feature_executive/annular.rs b/solidcore/crates/solidcore/src/blend/feature_executive/annular.rs
 new file mode 100644
-index 000000000..935fd3dac
+index 000000000..29ed22a1e
 --- /dev/null
 +++ b/solidcore/crates/solidcore/src/blend/feature_executive/annular.rs
-@@ -0,0 +1,428 @@
+@@ -0,0 +1,476 @@
 +//! Joint extension across the two circumferential boundaries of a turned feature.
 +//! Each circle bounds an entire period of the support. Trimming to either one alone
 +//! discards the very band between them.
@@ -383,6 +384,7 @@ index 000000000..935fd3dac
 +};
 +use crate::blend::fillet_section::{interval::Ivl, station::as_b_spline};
 +use crate::curve::curve::CurveKind;
++use crate::error::defeature::DefeatureFailure;
 +use crate::error::{Result, SolidError};
 +use crate::geom::tol::{self, SmallTopoType};
 +use crate::kernel::Kernel;
@@ -485,14 +487,12 @@ index 000000000..935fd3dac
 +            return Ok(false);
 +        }
 +        let (a, z) = edge_vertices(b, edge)?;
-+        let (from, to, turn) = match conic_turn(net, centre, x, y, radius, radius)? {
-+            Some(turn) => (a, z, turn),
-+            None => {
-+                let Some(turn) = conic_turn(net, centre, x, -y, radius, radius)? else {
-+                    return Ok(false);
-+                };
-+                (z, a, turn)
-+            }
++        let (from, to, turn) = if let Some(turn) = conic_turn(net, centre, x, y, radius, radius)? {
++            (a, z, turn)
++        } else if let Some(turn) = conic_turn(net, centre, x, -y, radius, radius)? {
++            (z, a, turn)
++        } else {
++            return Ok(false);
 +        };
 +        if next.insert(from, to).is_some() {
 +            return Ok(false);
@@ -664,7 +664,7 @@ index 000000000..935fd3dac
 +        Ok(Surface::from(cone))
 +    }
 +
-+    pub(super) fn patch(&self, k: &mut Kernel, tolerance: f64) -> Result<Brep> {
++    fn patch(&self, k: &mut Kernel, tolerance: f64) -> Result<Brep> {
 +        let [lo, hi] = self.sides.map(|s| s.rim);
 +        let surface = self.surface(k, lo, self.intersection.unwrap_or(hi))?;
 +        let (mut patch, _) = sheet::sheet_on(k, surface, tolerance)?;
@@ -681,7 +681,7 @@ index 000000000..935fd3dac
 +    /// There is no junction between the interior of the new band and any other
 +    /// retained face. A rib or another shell crossing the gap would need a different
 +    /// trim and cannot be filled by this annulus.
-+    pub(super) fn obstruction(
++    fn obstruction(
 +        &self,
 +        k: &Kernel,
 +        base: &mut Brep,
@@ -725,7 +725,51 @@ index 000000000..935fd3dac
 +        Ok(None)
 +    }
 +
-+    pub(super) fn apply(
++    /// A closed shell lying wholly in the gap never intersects the band. With other
++    /// material or void regions present, try the patch on a body with the same arena
++    /// ids, and keep it only if the untouched faces still separate material and void.
++    pub(super) fn remove(
++        &self,
++        k: &mut Kernel,
++        base: &mut Brep,
++        feature: &mut Feature,
++        patches: &mut Vec<Option<Brep>>,
++    ) -> Result<Option<DefeatureFailure>> {
++        let mut patch = self.patch(k, base.tolerance())?;
++        if let Some(face) = self.obstruction(k, base, &feature.faces, &mut patch)? {
++            return Ok(Some(DefeatureFailure::PatchIntersectsFace { face }));
++        }
++        if bp1::regions(base, None)?.len() <= 2 {
++            super::partition_feature(k, base, feature)?;
++            self.apply(k, base, feature, patch, patches)?;
++            return Ok(None);
++        }
++        let mut trial = base.clone_for_trial()?;
++        let mut cut = Feature {
++            loops: feature.loops.clone(),
++            faces: feature.faces.clone(),
++            defeature_ready: feature.defeature_ready,
++            ..Feature::default()
++        };
++        let previous = patches.len();
++        super::partition_feature(k, &mut trial, &mut cut)?;
++        self.apply(k, &mut trial, &mut cut, patch, patches)?;
++        let supports = self.supports();
++        for face in bp1::faces(base, None)? {
++            if supports.contains(&face) || feature.faces.contains(&face) {
++                continue;
++            }
++            if bounds_material(base, face)? && !bounds_material(&trial, face)? {
++                patches.truncate(previous);
++                return Ok(Some(DefeatureFailure::PatchEnclosesFace { face }));
++            }
++        }
++        *base = trial;
++        *feature = cut;
++        Ok(None)
++    }
++
++    fn apply(
 +        &self,
 +        k: &mut Kernel,
 +        base: &mut Brep,
@@ -801,19 +845,25 @@ index 000000000..935fd3dac
 +        Ok(())
 +    }
 +}
++
++fn bounds_material(b: &Brep, f: FaceId) -> Result<bool> {
++    use crate::mass::integrator::properties::{partition_face, sheet_face};
++    Ok(!partition_face(b, f)? && !sheet_face(b, f)?)
++}
 diff --git a/solidcore/crates/solidcore/src/error/defeature.rs b/solidcore/crates/solidcore/src/error/defeature.rs
-index 824207e29..d732b03a4 100644
+index 824207e29..5bc11a495 100644
 --- a/solidcore/crates/solidcore/src/error/defeature.rs
 +++ b/solidcore/crates/solidcore/src/error/defeature.rs
-@@ -14,6 +14,7 @@
+@@ -14,6 +14,8 @@
  //! | [`DefeatureFailure::ExtensionRefused`]       | `SM_ERR` (WR-656)        |
  //! | [`DefeatureFailure::TangentNeighbours`]      | `SM_ERR` (WR-656)        |
  //! | [`DefeatureFailure::NotEnclosed`]            | `SM_ERR` (WR-656)        |
 +//! | [`DefeatureFailure::PatchIntersectsFace`]    | no upstream counterpart  |
++//! | [`DefeatureFailure::PatchEnclosesFace`]      | no upstream counterpart  |
  //! | [`DefeatureFailure::ExtensionWithinTolerance`] | `SM_ERR` (WR-656)      |
  //!
  //! Deviations: not upstream. The failure's entity is the base loop edge of the hole the
-@@ -51,6 +52,11 @@ pub enum DefeatureFailure {
+@@ -51,6 +53,16 @@ pub enum DefeatureFailure {
          /// How far the faces were extended, when the patch was built in this call.
          extended_by: Option<f64>,
      },
@@ -822,29 +872,39 @@ index 824207e29..d732b03a4 100644
 +        /// The retained face the patch would intersect.
 +        face: crate::topology::FaceId,
 +    },
++    /// The patch would bury another shell's face within the rebuilt material.
++    PatchEnclosesFace {
++        /// A retained face that would cease to separate material from void.
++        face: crate::topology::FaceId,
++    },
      /// The faces along the loop, extended by `extended_by`, do not enclose it, and the
      /// extension is no longer than `identity_radius`: the distance within which a vertex of
      /// the loop and a vertex of the patch are one point (their zone tolerances summed, the
-@@ -76,6 +82,7 @@ impl DefeatureFailure {
+@@ -76,6 +88,8 @@ impl DefeatureFailure {
              | Self::ExtensionRefused { .. }
              | Self::TangentNeighbours { .. }
              | Self::NotEnclosed { .. }
 +            | Self::PatchIntersectsFace { .. }
++            | Self::PatchEnclosesFace { .. }
              | Self::ExtensionWithinTolerance { .. } => SM_ERR,
          }
      }
-@@ -88,6 +95,7 @@ impl DefeatureFailure {
+@@ -88,6 +102,8 @@ impl DefeatureFailure {
              | Self::ExtensionRefused { .. }
              | Self::TangentNeighbours { .. }
              | Self::NotEnclosed { .. }
 +            | Self::PatchIntersectsFace { .. }
++            | Self::PatchEnclosesFace { .. }
              | Self::ExtensionWithinTolerance { .. } => ErrorKind::Unsupported,
          }
      }
-@@ -97,6 +105,9 @@ impl core::fmt::Display for DefeatureFailure {
+@@ -97,6 +113,12 @@ impl core::fmt::Display for DefeatureFailure {
      fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
          match *self {
              Self::LoopNotPlanar => f.write_str("a planar cap was asked for a loop no plane holds"),
++            Self::PatchEnclosesFace { face } => write!(
++                f, "the circular patch would enclose retained face {}", face.index()
++            ),
 +            Self::PatchIntersectsFace { face } => write!(
 +                f, "the circular patch intersects retained face {}", face.index()
 +            ),
@@ -913,10 +973,21 @@ index 526ea35e5..a4f30c235 100644
                  delete_vertex(k, b, vertex, notifications.as_deref_mut())?;
                  continue;
 diff --git a/solidcore/crates/solidcore/tests/issue_3218_defeature_limits.rs b/solidcore/crates/solidcore/tests/issue_3218_defeature_limits.rs
-index 0a8ea1323..b96b9265a 100644
+index 0a8ea1323..0abbbd97f 100644
 --- a/solidcore/crates/solidcore/tests/issue_3218_defeature_limits.rs
 +++ b/solidcore/crates/solidcore/tests/issue_3218_defeature_limits.rs
-@@ -1078,3 +1078,283 @@ fn certify_feature(k: &mut Kernel, features: Vec<Option<Brep>>, removed: Removed
+@@ -15,8 +15,8 @@
+ //! - `ExtensionWithinTolerance`: the faces along a fillet's loop extended by less than the
+ //!   distance within which the loop's vertices and the patch's are one point.
+ //!
+-//! The models are the upstream test files, read by the Rust reader when the pinned upstream
+-//! checkout is present.
++//! The file-based cases use the pinned upstream checkout when present. The annular
++//! groove cases below build their solids by revolving dimensioned profiles.
+ #![allow(
+     clippy::unwrap_used,
+     clippy::expect_used,
+@@ -1078,3 +1078,311 @@ fn certify_feature(k: &mut Kernel, features: Vec<Option<Brep>>, removed: Removed
      let kv = holds_volume(k, &mut fb, gap, delta, &what);
      eprintln!("{what}: delta {delta:e}, model {gap:?} built {kv:?}");
  }
@@ -925,17 +996,20 @@ index 0a8ea1323..b96b9265a 100644
 +/// A single patch must use both circles to recover the wall between them.
 +mod ring_grooves {
 +    use solidcore::blend::feature_executive::{FeatureExecutive, RebuildBrepType};
++    use solidcore::boolean::api_brep::boolean_union;
 +    use solidcore::curve::curve::Curve;
 +    use solidcore::error::defeature::DefeatureFailure;
++    use solidcore::error::Reason;
 +    use solidcore::geom::axis2_placement::Axis2Placement;
 +    use solidcore::geom::vector3d::Vec3;
 +    use solidcore::kernel::UpstreamFixes;
 +    use solidcore::mass::enclosure::enclose_volume;
 +    use solidcore::nurbs::b_spline_curve::{p1::BSplineCurve, NurbCircleParam};
++    use solidcore::primitive::api_primitives::create_sphere;
 +    use solidcore::sweep::directed::revolve;
 +    use solidcore::topology::brep::{p2::is_manifold_solid, validation};
 +    use solidcore::topology::{face::p4::vertices, vertex};
-+    use solidcore::{Brep, FaceId, Kernel};
++    use solidcore::{Brep, FaceId, Kernel, SolidError};
 +    use std::f64::consts::PI;
 +
 +    struct Groove {
@@ -1031,6 +1105,19 @@ index 0a8ea1323..b96b9265a 100644
 +        );
 +    }
 +
++    fn add_groove(k: &mut Kernel, ex: &mut FeatureExecutive<'_>, faces: &[FaceId]) {
++        let feature = ex
++            .add_feature(
++                k,
++                faces,
++                RebuildBrepType::ExtendSurface,
++                RebuildBrepType::FromOtherBrep,
++            )
++            .unwrap()
++            .unwrap();
++        assert_eq!(ex.features()[feature].loops.len(), 2);
++    }
++
 +    fn remove(
 +        k: &mut Kernel,
 +        b: &mut Brep,
@@ -1040,15 +1127,7 @@ index 0a8ea1323..b96b9265a 100644
 +        let fs = faces_in_band(b, 7.5, 12.5);
 +        assert_eq!(fs.len(), groove.meridian.len() - 1);
 +        let mut ex = FeatureExecutive::new(k, b)?;
-+        let feature = ex
-+            .add_feature(
-+                k,
-+                &fs,
-+                RebuildBrepType::ExtendSurface,
-+                RebuildBrepType::FromOtherBrep,
-+            )?
-+            .unwrap();
-+        assert_eq!(ex.features()[feature].loops.len(), 2);
++        add_groove(k, &mut ex, &fs);
 +        if let Some(distance) = reach {
 +            ex.set_base_ext_dist(distance);
 +        }
@@ -1175,14 +1254,7 @@ index 0a8ea1323..b96b9265a 100644
 +            };
 +            let mut ex = FeatureExecutive::new(&mut k, &mut body).unwrap();
 +            for fs in order {
-+                ex.add_feature(
-+                    &mut k,
-+                    fs,
-+                    RebuildBrepType::ExtendSurface,
-+                    RebuildBrepType::FromOtherBrep,
-+                )
-+                .unwrap()
-+                .unwrap();
++                add_groove(&mut k, &mut ex, fs);
 +            }
 +            let kept = ex.do_defeature(&mut k).unwrap();
 +            assert_eq!(kept.len(), 1);
@@ -1198,5 +1270,32 @@ index 0a8ea1323..b96b9265a 100644
 +            let volume = PI * (500.0 - 4.0 * 9.0 + 39.0 + 9.0 * 15.0 + (64.0 - 4.5_f64.powi(2)));
 +            solid(&mut k, &mut body, 13, volume);
 +        }
++    }
++
++    #[test]
++    fn a_ball_wholly_inside_the_missing_material_keeps_its_region() {
++        let mut k = kernel();
++        let shaft = SQUARE.body(&mut k);
++        // The entire ball lies between the groove floor at r = 4 and its healed wall at r = 5.
++        let radius = 0.2;
++        let ball = create_sphere(&mut k, Vec3::new(4.5, 0.0, 10.0), radius).unwrap();
++        let mut body = boolean_union(&mut k, shaft, ball).unwrap();
++        body.use_arena_naming().unwrap();
++        let [ball_face]: [FaceId; 1] = faces_in_band(&body, 9.5, 10.5).try_into().unwrap();
++        let mut groove = faces_in_band(&body, 7.5, 12.5);
++        groove.retain(|f| *f != ball_face);
++        assert_eq!(groove.len(), 3);
++        let mut ex = FeatureExecutive::new(&mut k, &mut body).unwrap();
++        add_groove(&mut k, &mut ex, &groove);
++        let err = ex.do_defeature(&mut k).unwrap_err();
++        let SolidError::Failed(failure) = err else {
++            panic!("expected a refusal naming the enclosed face, got {err:?}");
++        };
++        assert_eq!(
++            failure.reason,
++            Reason::Defeature(DefeatureFailure::PatchEnclosesFace { face: ball_face })
++        );
++        let original = PI * (500.0 - 4.0 * 9.0 + 4.0 / 3.0 * radius.powi(3));
++        solid(&mut k, &mut body, 8, original);
 +    }
 +}
