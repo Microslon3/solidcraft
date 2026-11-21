@@ -82,7 +82,7 @@ jobs:
       - name: Exercise the orbit and middle-button regressions
         if: matrix.check == 'Linux full gate'
         working-directory: source
-        run: cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation::view_key_tests viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste
+        run: cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation::view_key_tests viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste another_device_starts_with_no_buttons_seen_and_no_settling
       - name: Run the complete pre-commit gate and the query goldens
         if: matrix.check == 'Linux full gate'
         working-directory: source
@@ -104,4 +104,4 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: source
         run: >-
-          cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation:: viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste
+          cargo test --locked --profile ci -p solidcraft-ui-egui --lib -- navigation:: viewport_middle_ middle_click_on_chamfer_distance_keeps_primary_selection_paste another_device_starts_with_no_buttons_seen_and_no_settling
