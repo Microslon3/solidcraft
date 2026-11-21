@@ -526,10 +526,10 @@ index f90e67fefd40715a18b71a19c55adb0a467ffe00..bbc2bd61cc76b54b859b7294ae55d516
      fn bounded_and_approximation() {
          let mut e = Extent3d::new();
 diff --git a/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs b/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs
-index 0de4f1e32543086193b071e65526d20308af0f28..ba5dc5a5fc94d13a7a5e9c9253b66465c3a4f92c 100644
+index 0de4f1e32543086193b071e65526d20308af0f28..d9bef3c5d56394add76151310347907298a2a5a9 100644
 --- a/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs
 +++ b/solidcore/crates/solidcore/src/geom/geom_utility/p1.rs
-@@ -414,16 +414,88 @@ pub fn line_plane_intersect(
+@@ -414,16 +414,90 @@ pub fn line_plane_intersect(
  
      let plane_eq_d = -plane_norm.dot(plane_pnt);
      let tol = EFF_ZERO * line_vec.max_dimension() + EFF_ZERO_SQ;
@@ -594,10 +594,12 @@ index 0de4f1e32543086193b071e65526d20308af0f28..ba5dc5a5fc94d13a7a5e9c9253b66465
 +) -> Option<(f64, f64)> {
 +    let finite = |v: Vec3| v.to_array().into_iter().all(f64::is_finite);
 +    let denom = line_vec.dot(plane_norm);
-+    if !(min_abs_dot.is_finite() && min_abs_dot > 0.0 && denom.is_finite())
-+        || ![line_pnt, line_vec, plane_pnt, plane_norm]
++    if !(min_abs_dot.is_finite()
++        && min_abs_dot > 0.0
++        && denom.is_finite()
++        && [line_pnt, line_vec, plane_pnt, plane_norm]
 +            .into_iter()
-+            .all(finite)
++            .all(finite))
 +    {
 +        return None;
 +    }
@@ -624,7 +626,7 @@ index 0de4f1e32543086193b071e65526d20308af0f28..ba5dc5a5fc94d13a7a5e9c9253b66465
  }
  
  /// Intersection of the line `line_pt + t * line_vec` with the plane
-@@ -1933,6 +2005,91 @@ mod tests {
+@@ -1933,6 +2007,91 @@ mod tests {
          assert!((a - 45.0).abs() < 1e-12);
      }
  
