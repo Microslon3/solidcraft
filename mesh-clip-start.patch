@@ -1,0 +1,256 @@
+diff --git a/crates/geom/src/bvh.rs b/crates/geom/src/bvh.rs
+index 6fe39a8db2afd18eb07d234eabf84136615c5366..0dd9b136cd15379108bbd922d0c2e24823b00dcb 100644
+--- a/crates/geom/src/bvh.rs
++++ b/crates/geom/src/bvh.rs
+@@ -4,7 +4,7 @@
+ //! a mesh's triangles and one over its edge segments, for picking.
+ 
+ use crate::prelude::*;
+-use crate::{Aabb3, Mesh};
++use crate::{Aabb3, Mesh, RaycastStart, raycast_mesh_with_start};
+ use solidcore_record::Vec3;
+ 
+ /// Most items in a leaf.
+@@ -297,10 +297,15 @@ impl MeshIndex {
+     /// [`Mesh::raycast`] through the index: the same answer, including which triangle wins a tie.
+     /// For a mesh other than the one indexed, the plain scan answers.
+     pub fn raycast(&self, mesh: &Mesh, o: Vec3, dir: Vec3) -> Option<(f64, usize)> {
++        self.raycast_with_start(mesh, o, dir, RaycastStart::SkipSelfHit)
++    }
++
++    /// [`raycast_mesh_with_start`] through the index, with ties resolved as in the scan.
++    pub fn raycast_with_start(&self, mesh: &Mesh, o: Vec3, dir: Vec3, start: RaycastStart) -> Option<(f64, usize)> {
+         if mesh.triangles.len() != self.triangle_count {
+-            return mesh.raycast(o, dir);
++            return raycast_mesh_with_start(mesh, o, dir, start);
+         }
+-        let frame = crate::mesh::RayFrame::new(o, dir)?;
++        let frame = crate::mesh::RayFrame::new(o, dir, start)?;
+         self.triangles
+             .nearest(o, dir, |i| mesh.triangles.get(i as usize).and_then(|t| mesh.tri(t)).and_then(|p| frame.hit(p)))
+             .map(|(t, i)| (t, i as usize))
+diff --git a/crates/geom/src/lib.rs b/crates/geom/src/lib.rs
+index 457c83d2b16a16b4e8fd0cf4a56fc9eaceb85ff4..20731ba2978a9ad9ec9b427e1297299573b6e009 100644
+--- a/crates/geom/src/lib.rs
++++ b/crates/geom/src/lib.rs
+@@ -122,7 +122,10 @@ pub use blend::hermite_bezier;
+ pub use bvh::{Bvh, MeshIndex, PointCloudIndex};
+ pub use chain::{Chain, Closed, Ends, Open, Path, Planar, Ring};
+ pub use grid::Grid;
+-pub use mesh::{Aabb3, BoxedTriangle, InsideIndex, MassProperties, Mesh, MeshGeom, MeshMeasure, TANGENT_CHAIN, find_close_pair};
++pub use mesh::{
++    Aabb3, BoxedTriangle, InsideIndex, MassProperties, Mesh, MeshGeom, MeshMeasure, RaycastStart, TANGENT_CHAIN, find_close_pair,
++    raycast_mesh_with_start,
++};
+ pub use plane::PlaneGeom;
+ pub use profile::{ArcMap, Loop2Geom, MAX_DERIVATIVE_ORDER, Region2Geom, Seg2Geom, Similarity2, bezier, regions_apart};
+ pub use unit_vec3::UnitVec3;
+diff --git a/crates/geom/src/mesh.rs b/crates/geom/src/mesh.rs
+index 684c388b956a2cabbd5f931b6eb21e0e459c90cd..cb56bc434f2b6947908935164616e81abb457408 100644
+--- a/crates/geom/src/mesh.rs
++++ b/crates/geom/src/mesh.rs
+@@ -302,6 +302,15 @@ pub struct MassProperties {
+     pub inertia: [[f64; 3]; 3],
+ }
+ 
++/// Where a mesh ray starts accepting intersections.
++#[derive(Clone, Copy)]
++pub enum RaycastStart {
++    /// Ignore the ray's origin and the usual self-intersection margin just ahead of it.
++    SkipSelfHit,
++    /// Include the origin itself, for a ray starting on a kept clipping boundary.
++    IncludeOrigin,
++}
++
+ /// The geometry of a display mesh (solidcore-tess's [`Mesh`]): its measures, point and ray
+ /// queries, and the edge chains and face patches picking extends to. In scope with
+ /// `use solidcraft_geom::prelude::*`.
+@@ -784,17 +793,7 @@ impl MeshGeom for Mesh {
+     }
+ 
+     fn raycast(&self, o: Vec3, dir: Vec3) -> Option<(f64, usize)> {
+-        let frame = RayFrame::new(o, dir)?;
+-        let mut best: Option<(f64, usize)> = None;
+-        for (i, t) in self.triangles.iter().enumerate() {
+-            let Some(p) = self.tri(t) else { continue };
+-            if let Some(t) = frame.hit(p)
+-                && best.is_none_or(|(bt, _)| t < bt)
+-            {
+-                best = Some((t, i));
+-            }
+-        }
+-        best
++        raycast_mesh_with_start(self, o, dir, RaycastStart::SkipSelfHit)
+     }
+ 
+     fn inside_index(&self) -> InsideIndex<'_> {
+@@ -873,12 +872,29 @@ fn smooth_seam(mesh: &Mesh, i: usize, cos: f64) -> bool {
+     sample.iter().all(|&q| matches!((normal_near(*a, q), normal_near(*b, q)), (Some(na), Some(nb)) if na.dot(nb) > cos))
+ }
+ 
++/// Closest watertight intersection of the ray with the mesh (ray parameter, triangle index),
++/// with an explicit choice for hits at the ray's start. The lowest triangle index wins ties.
++pub fn raycast_mesh_with_start(mesh: &Mesh, o: Vec3, dir: Vec3, start: RaycastStart) -> Option<(f64, usize)> {
++    let frame = RayFrame::new(o, dir, start)?;
++    let mut best: Option<(f64, usize)> = None;
++    for (i, t) in mesh.triangles.iter().enumerate() {
++        let Some(p) = mesh.tri(t) else { continue };
++        if let Some(t) = frame.hit(p)
++            && best.is_none_or(|(bt, _)| t < bt)
++        {
++            best = Some((t, i));
++        }
++    }
++    best
++}
++
+ /// A ray in the frame of [`Mesh::raycast`]'s watertight test: its dominant axis becomes z; x and
+ /// y follow it cyclically, swapped to keep the frame right-handed when the ray runs towards −z.
+ pub(crate) struct RayFrame {
+     o: Vec3,
+     k: [usize; 3],
+     s: [f64; 3],
++    start: RaycastStart,
+ }
+ 
+ fn comp(v: Vec3, k: usize) -> f64 {
+@@ -891,7 +907,7 @@ fn comp(v: Vec3, k: usize) -> f64 {
+ 
+ impl RayFrame {
+     /// `None` for a direction that is zero or not finite.
+-    pub(crate) fn new(o: Vec3, dir: Vec3) -> Option<RayFrame> {
++    pub(crate) fn new(o: Vec3, dir: Vec3, start: RaycastStart) -> Option<RayFrame> {
+         let a = [dir.x.abs(), dir.y.abs(), dir.z.abs()];
+         let kz = if a[0] >= a[1] && a[0] >= a[2] {
+             0
+@@ -908,7 +924,7 @@ impl RayFrame {
+         if dz < 0.0 {
+             std::mem::swap(&mut kx, &mut ky);
+         }
+-        Some(RayFrame { o, k: [kx, ky, kz], s: [comp(dir, kx) / dz, comp(dir, ky) / dz, 1.0 / dz] })
++        Some(RayFrame { o, k: [kx, ky, kz], s: [comp(dir, kx) / dz, comp(dir, ky) / dz, 1.0 / dz], start })
+     }
+ 
+     /// A vertex in the ray's frame: (x, y) across the ray, z scaled along it.
+@@ -918,7 +934,7 @@ impl RayFrame {
+         (comp(q, self.k[0]) - self.s[0] * z, comp(q, self.k[1]) - self.s[1] * z, self.s[2] * z)
+     }
+ 
+-    /// The distance along the ray to triangle `[pa, pb, pc]` (`None`: missed, or not in front).
++    /// The ray parameter of a triangle hit at or beyond the configured start.
+     pub(crate) fn hit(&self, [pa, pb, pc]: [Vec3; 3]) -> Option<f64> {
+         let ((ax, ay, az), (bx, by, bz), (cx, cy, cz)) = (self.frame(pa), self.frame(pb), self.frame(pc));
+         let u = cx * by - cy * bx;
+@@ -932,7 +948,11 @@ impl RayFrame {
+             return None;
+         }
+         let t = (u * az + v * bz + w * cz) / det;
+-        (t.is_finite() && t > 1e-9).then_some(t)
++        let within_ray = match self.start {
++            RaycastStart::SkipSelfHit => t > 1e-9,
++            RaycastStart::IncludeOrigin => t >= 0.0,
++        };
++        (t.is_finite() && within_ray).then_some(t)
+     }
+ }
+ 
+diff --git a/crates/ui-egui/src/pick_index.rs b/crates/ui-egui/src/pick_index.rs
+index 2ea174dd4c644c1de0acc16921573328617b5287..4583c4eb2d862b11873a3617c0dd7783e9dc152c 100644
+--- a/crates/ui-egui/src/pick_index.rs
++++ b/crates/ui-egui/src/pick_index.rs
+@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
+ 
+ use egui::{Pos2, vec2};
+ use solidcore_record::Vec3;
+-use solidcraft_engine::geom::{Mesh, MeshIndex, PointCloudIndex};
++use solidcraft_engine::geom::{Mesh, MeshIndex, PointCloudIndex, RaycastStart, raycast_mesh_with_start};
+ 
+ use crate::viewport::Proj;
+ 
+@@ -175,9 +175,14 @@ pub(crate) fn segments_near(index: Option<&MeshIndex>, mesh: &Mesh, o: Vec3, d:
+ 
+ /// The nearest triangle of `mesh` along the ray, through its index.
+ pub(crate) fn raycast(index: Option<&MeshIndex>, mesh: &Mesh, o: Vec3, d: Vec3) -> Option<(f64, usize)> {
++    raycast_with_start(index, mesh, o, d, RaycastStart::SkipSelfHit)
++}
++
++/// Choose how a pick treats the start of the ray, including when no index is available.
++pub(crate) fn raycast_with_start(index: Option<&MeshIndex>, mesh: &Mesh, o: Vec3, d: Vec3, start: RaycastStart) -> Option<(f64, usize)> {
+     match index.filter(|_| !scanning()) {
+-        Some(index) => index.raycast(mesh, o, d),
+-        None => mesh.raycast(o, d),
++        Some(index) => index.raycast_with_start(mesh, o, d, start),
++        None => raycast_mesh_with_start(mesh, o, d, start),
+     }
+ }
+ 
+diff --git a/crates/ui-egui/src/view_pick.rs b/crates/ui-egui/src/view_pick.rs
+index e554580180fffa031a717b113df92e4a94d8b61e..2eba151aa490aa0a6e825865be36516dfd5fc2ce 100644
+--- a/crates/ui-egui/src/view_pick.rs
++++ b/crates/ui-egui/src/view_pick.rs
+@@ -22,7 +22,7 @@ use solidcore_ops::affine::{clipped_line_box_interval, line_halfspace_interval,
+ use solidcore_record::Vec3;
+ use solidcraft_engine::SectionPlane;
+ use solidcraft_engine::doc::{apply_point, is_identity};
+-use solidcraft_engine::geom::Mesh;
++use solidcraft_engine::geom::{Mesh, RaycastStart};
+ 
+ use crate::SolveApp;
+ 
+@@ -372,7 +372,13 @@ fn mesh_hit_in_clip(app: &SolveApp, body: &solidcraft_engine::doc::ModelBody, or
+     let (mesh, place) = body.mesh_in_place();
+     let clipped_origin = Vec3::from(line_point_at(origin.into(), dir.into(), clip.0));
+     let (local_origin, local_dir) = crate::viewport::local_ray(&place, clipped_origin, dir)?;
+-    let (t, _) = crate::pick_index::raycast(app.viewport.pick_index.of(&mesh).as_deref(), &mesh, local_origin, local_dir)?;
++    let (t, _) = crate::pick_index::raycast_with_start(
++        app.viewport.pick_index.of(&mesh).as_deref(),
++        &mesh,
++        local_origin,
++        local_dir,
++        RaycastStart::IncludeOrigin,
++    )?;
+     line_parameter_from_start(clip, t)
+ }
+ 
+diff --git a/crates/ui-egui/src/view_pick_tests.rs b/crates/ui-egui/src/view_pick_tests.rs
+index 4f99046f169cf93868b9c17995989154b7e6ac2d..e4fab799c88c67f4c256971b13c0f818b8e29ea5 100644
+--- a/crates/ui-egui/src/view_pick_tests.rs
++++ b/crates/ui-egui/src/view_pick_tests.rs
+@@ -93,15 +93,32 @@ fn clipped_mesh_pick_measures_from_the_original_ray_origin() {
+     let state = crate::open_meshing::session_world(&h.app.session);
+     let body = state.body(&names[0]).unwrap();
+     assert!(body.body.is_mesh());
+-    assert!(!solidcraft_engine::doc::is_identity(&body.mesh_in_place().1), "the ray must be transformed to the definition's mesh");
++    let (mesh, place) = body.mesh_in_place();
++    assert!(!solidcraft_engine::doc::is_identity(&place), "the ray must be transformed to the definition's mesh");
++    assert!(h.app.viewport.pick_index.of(&mesh).is_some(), "the small mesh gets an index immediately");
+ 
+     // The copy's triangles are at world z = 12 and z = 6. The ray crosses their interiors.
+     let origin = Vec3::new(43.0, -3.0, 30.0);
+     let dir = Vec3::new(0.0, 0.0, -1.0);
+-    let hit = |clip| super::mesh_hit_in_clip(&h.app, body, origin, dir, clip);
+-    assert!(hit((0.0, 30.0)).is_some_and(|depth| (depth - 18.0).abs() < 1e-9), "the nearer triangle");
+-    assert!(hit((21.0, 30.0)).is_some_and(|depth| (depth - 24.0).abs() < 1e-9), "the farther triangle, from the original origin");
+-    assert_eq!(hit((21.0, 23.0)), None, "the farther triangle is beyond the far cutoff");
++    let cases = [
++        ((0.0, 30.0), Some(18.0)),
++        // A hit exactly on the near cutoff remains visible even if the far triangle is clipped.
++        ((18.0, 30.0), Some(18.0)),
++        ((18.0, 23.0), Some(18.0)),
++        ((21.0, 30.0), Some(24.0)),
++        ((21.0, 23.0), None),
++    ];
++    for scan in [false, true] {
++        let depths = crate::pick_index::SCAN.with(|setting| {
++            let previous = setting.replace(scan);
++            let depths = cases.map(|(clip, _)| super::mesh_hit_in_clip(&h.app, body, origin, dir, clip));
++            setting.set(previous);
++            depths
++        });
++        for ((clip, expected), depth) in cases.into_iter().zip(depths) {
++            assert_eq!(depth, expected, "scan {scan}, clip {clip:?}");
++        }
++    }
+ }
+ 
+ /// A hidden body answers with nothing, as the viewport does not show it.
