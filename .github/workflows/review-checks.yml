@@ -85,4 +85,5 @@ jobs:
       - name: Check the navigation module on Windows
         if: runner.os == 'Windows' && matrix.pr == 20292
         working-directory: source
-        run: cargo test --locked --profile ci -p solidcraft-ui-egui --lib navigation::
+        run: |
+          cargo test --locked --profile ci -p solidcraft-ui-egui --lib navigation::
