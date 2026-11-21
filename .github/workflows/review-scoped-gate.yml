@@ -1,0 +1,106 @@
+name: Navigation review tests with project fixtures
+on:
+  push:
+    branches: [codex/review-checks-20290-20292]
+    paths: ['.github/workflows/review-scoped-gate.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ['Application tests with the project CI grader', 'SolidCore tests and query goldens with reference files']
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_CI_DEBUG: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_GOLDENS_DEBUG: 0
+      CARGO_PROFILE_GOLDENS_INCREMENTAL: 'false'
+      CARGO_BUILD_JOBS: 3
+      RUST_MIN_STACK: 8388608
+      NEXTEST_TEST_THREADS: 2
+      RUST_TEST_THREADS: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: proof
+          persist-credentials: false
+      - name: Read the upstream revision
+        id: base
+        run: echo "sha=$(git -C proof show HEAD:base.txt)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: tangency-labs/solidcraft
+          ref: ${{ steps.base.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - name: Verify the exact navigation source tree
+        working-directory: source
+        run: |
+          git -C ../proof cat-file blob HEAD:20292.patch > "$RUNNER_TEMP/solidcraft-nav.patch"
+          git apply --cached "$RUNNER_TEMP/solidcraft-nav.patch"
+          git diff --cached --name-only -z | git checkout-index -f -z --stdin
+          git diff --quiet
+          git diff --cached --check
+          tree=$(git write-tree)
+          echo "Git tree $tree"
+          test "$tree" = "$(git -C ../proof show HEAD:nav-tree.txt)"
+      - name: Select the project's Rust toolchain
+        working-directory: source
+        run: rustup show active-toolchain
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8
+        with:
+          tool: cargo-nextest@0.9.150
+      - name: Install Linux build and software graphics dependencies
+        if: startsWith(matrix.check, 'Application')
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+      - name: Run both affected application packages, then grade JUnit as in upstream CI
+        if: startsWith(matrix.check, 'Application')
+        working-directory: source
+        run: |
+          status=0
+          cargo nextest run --locked --cargo-profile ci --profile ci --no-fail-fast -p solidcraft-kernel -p solidcraft-ui-egui -E 'not (binary(action_matrix) & test(=action_matrix_sample))' || status=$?
+          if [[ "$status" != 0 && "$status" != 100 ]]; then exit "$status"; fi
+          junit=target/nextest/ci/junit.xml
+          test -s "$junit"
+          cargo xtask known-failing --junit "$junit"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && startsWith(matrix.check, 'Application')
+        with:
+          name: navigation-application-junit
+          path: source/target/nextest/ci/junit.xml
+          if-no-files-found: error
+          retention-days: 7
+      - name: Get the project's pinned reference test files
+        if: startsWith(matrix.check, 'SolidCore')
+        working-directory: source/solidcore
+        run: |
+          source scripts/upstream-pin.env
+          git init -q upstream
+          git -C upstream remote add origin "$UPSTREAM_REPO"
+          git -C upstream sparse-checkout set --no-cone '/TestFiles/pt_TestFiles/'
+          git -C upstream fetch --no-tags --filter=blob:none --depth 1 origin "$UPSTREAM_COMMIT"
+          git -C upstream checkout --detach "$UPSTREAM_COMMIT"
+          test "$(git -C upstream rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          test -s upstream/TestFiles/pt_TestFiles/Surface.sms
+          test -s upstream/TestFiles/pt_TestFiles/Solids/fillet_ts.smb
+          echo "SOLIDCORE_REQUIRE_UPSTREAM=1" >> "$GITHUB_ENV"
+          du -sh upstream/TestFiles
+      - name: Check both touched query units against the reference
+        if: startsWith(matrix.check, 'SolidCore')
+        working-directory: source/solidcore
+        run: cargo run --locked --profile goldens -p goldens -- --unit query.api_queries --unit query.brep --goldens
+      - name: Run all 13 affected SolidCore packages to completion
+        if: success() && startsWith(matrix.check, 'SolidCore')
+        working-directory: source/solidcore
+        run: >-
+          cargo nextest run --locked --cargo-profile goldens --no-fail-fast
+          -p diagnostics -p nurbs-grid-mesh -p solidcore -p solidcore-cadir -p solidcore-convert
+          -p solidcore-ops -p solidcore-record -p solidcore-ssi -p solidcore-step
+          -p solidcore-tess -p ssi -p step-export -p xtask
