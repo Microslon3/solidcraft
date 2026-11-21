@@ -1,0 +1,106 @@
+{
+  "description": "Issue 19624 frustum rotated profile and analytic face picks.",
+  "commands": [
+    {
+      "command": "sketch.create",
+      "params": {
+        "name": "Turned profile",
+        "plane": {
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "x_dir": [
+            1,
+            0,
+            0
+          ],
+          "y_dir": [
+            0,
+            0,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "command": "sketch.line",
+      "params": {
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            6,
+            0
+          ],
+          [
+            5.2,
+            8
+          ],
+          [
+            4,
+            8
+          ],
+          [
+            4,
+            12
+          ],
+          [
+            4.8,
+            12
+          ],
+          [
+            4,
+            20
+          ],
+          [
+            0,
+            20
+          ]
+        ],
+        "closed": true,
+        "infer": false
+      }
+    },
+    {
+      "command": "sketch.finish",
+      "params": {}
+    },
+    {
+      "command": "solid.revolve",
+      "params": {
+        "axis": "y",
+        "angle": "360 deg",
+        "operation": "new",
+        "body_name": "Turned part"
+      }
+    },
+    {
+      "command": "face.delete",
+      "params": {
+        "body": "Turned part",
+        "faces": [
+          [
+            4.6,
+            0,
+            8
+          ],
+          [
+            4,
+            0,
+            10
+          ],
+          [
+            4.4,
+            0,
+            12
+          ]
+        ],
+        "heal": true
+      }
+    }
+  ]
+}

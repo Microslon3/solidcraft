@@ -1,0 +1,10 @@
+{
+  "description": "On the STEP input exported by SolidCraft, heal the inner wall and shoulders of the ring groove.",
+  "commands": [
+    { "command": "face.delete", "params": {
+      "body": "Turned part",
+      "faces": [[4.5, 0, 8], [4, 0, 10], [4.5, 0, 12]],
+      "heal": true
+    }}
+  ]
+}

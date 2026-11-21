@@ -1,0 +1,97 @@
+{
+  "description": "Issue 19624 v rotated profile and analytic face picks.",
+  "commands": [
+    {
+      "command": "sketch.create",
+      "params": {
+        "name": "Turned profile",
+        "plane": {
+          "origin": [
+            0,
+            0,
+            0
+          ],
+          "x_dir": [
+            1,
+            0,
+            0
+          ],
+          "y_dir": [
+            0,
+            0,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "command": "sketch.line",
+      "params": {
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            5,
+            0
+          ],
+          [
+            5,
+            8
+          ],
+          [
+            4,
+            10
+          ],
+          [
+            5,
+            12
+          ],
+          [
+            5,
+            20
+          ],
+          [
+            0,
+            20
+          ]
+        ],
+        "closed": true,
+        "infer": false
+      }
+    },
+    {
+      "command": "sketch.finish",
+      "params": {}
+    },
+    {
+      "command": "solid.revolve",
+      "params": {
+        "axis": "y",
+        "angle": "360 deg",
+        "operation": "new",
+        "body_name": "Turned part"
+      }
+    },
+    {
+      "command": "face.delete",
+      "params": {
+        "body": "Turned part",
+        "faces": [
+          [
+            4.5,
+            0,
+            9
+          ],
+          [
+            4.5,
+            0,
+            11
+          ]
+        ],
+        "heal": true
+      }
+    }
+  ]
+}
