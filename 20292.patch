@@ -196,7 +196,7 @@ index 685c0de06688cbbb2efa6c7728208652304eea10..4a52f09bc11bfcbd6642fd35e8d78aa4
      pub fn face_count(&self) -> usize {
          if self.mesh.is_some() { 1 } else { self.record.topology().faces.len() }
 diff --git a/crates/kernel/src/placement_tests.rs b/crates/kernel/src/placement_tests.rs
-index e2055e48b7509dd33f07dbbcf55bfc5c148e964f..a34cfe6f63ea8a992e7749ffd0b09987d132707e 100644
+index e2055e48b7509dd33f07dbbcf55bfc5c148e964f..c77f1891658bdba8703267995c192cdc2a07f614 100644
 --- a/crates/kernel/src/placement_tests.rs
 +++ b/crates/kernel/src/placement_tests.rs
 @@ -267,6 +267,40 @@ fn a_rounded_body_moves_exactly_as_the_kernel_moves_it() {
@@ -208,7 +208,7 @@ index e2055e48b7509dd33f07dbbcf55bfc5c148e964f..a34cfe6f63ea8a992e7749ffd0b09987
 +    let part = periodic_cylinder();
 +    let (c, s) = (0.6_f64.cos(), 0.6_f64.sin());
 +    let turn = [[1.0, 0.0, 0.0, 0.0], [0.0, c, s, 0.0], [0.0, -s, c, 0.0], [50.0, -20.0, 5.0, 1.0]];
-+    let shift = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [200.0, 40.0, -12.0, 1.0]];
++    let shift = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [200.0, 40.0, -12.0, 1.0]];
 +    let both = solidcore_ops::affine::then(&turn, &shift).unwrap();
 +    let placed = transform_matrix(&part, turn).unwrap();
 +    let elsewhere = transform_matrix(&part, shift).unwrap();
@@ -1117,7 +1117,7 @@ index f61e84c3ff3ef195562d02f71590b8430757ba3c..a5f7cd4d8f9bb4d400d4c33514a1d340
      objects: &dyn TopologyObjects<O>,
      target: O,
 diff --git a/solidcore/crates/solidcore/src/query/brep.rs b/solidcore/crates/solidcore/src/query/brep.rs
-index d8ca3579ced067fdbcced0d110071ad238228619..c9bcc19d3546b9fb48e596171cf2a6c0c348e83f 100644
+index d8ca3579ced067fdbcced0d110071ad238228619..e67163c4cad8672ddf349d3480564c16479f44dc 100644
 --- a/solidcore/crates/solidcore/src/query/brep.rs
 +++ b/solidcore/crates/solidcore/src/query/brep.rs
 @@ -92,20 +92,24 @@ pub use ray::{
@@ -1258,7 +1258,7 @@ index d8ca3579ced067fdbcced0d110071ad238228619..c9bcc19d3546b9fb48e596171cf2a6c0
 +                _ => false,
 +            };
 +            if material {
-+                let start = first.map_or(near.max(clip.0), |(start, _)| start);
++                let start = first.map_or_else(|| near.max(clip.0), |(start, _)| start);
 +                first = Some((start, far.min(clip.1)));
 +            } else if first.is_some() {
 +                break;
