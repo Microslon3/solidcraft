@@ -128,12 +128,23 @@ jobs:
         if: matrix.kind == 'windows'
         shell: bash
         run: python proof/cases/check_app.py --cli "$PWD/source/target/ci/solidcraft-cli.exe" --out "$PWD/results" --expect fixed
+      - name: Reopen the saved shaft and edit its named faces
+        if: matrix.kind == 'windows'
+        shell: bash
+        run: python proof/cases/check_names.py --cli "$PWD/source/target/ci/solidcraft-cli.exe" --out "$PWD/results/names"
+      - name: Remove two grooves in both orders
+        if: matrix.kind == 'windows'
+        shell: bash
+        run: python proof/cases/check_double.py --cli "$PWD/source/target/ci/solidcraft-cli.exe" --out "$PWD/results/two-grooves"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: success() && matrix.kind == 'windows'
         with:
           name: ring-groove-windows-results
           path: |
             results/*.json
+            results/names/names-summary.json
+            results/two-grooves/double-order-summary.json
             source/target/ci/solidcraft.exe
+            source/target/ci/solidcraft-cli.exe
           if-no-files-found: error
           retention-days: 3

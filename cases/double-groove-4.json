@@ -1,0 +1,50 @@
+{
+  "commands": [
+    {
+      "command": "face.delete",
+      "params": {
+        "body": "Turned part",
+        "faces": [
+          "F2:side:l5",
+          "F2:side:l4",
+          "F2:side:l3"
+        ],
+        "heal": true
+      }
+    },
+    {
+      "command": "inspect.measure",
+      "params": {
+        "bodies": [
+          "Turned part"
+        ]
+      }
+    },
+    {
+      "command": "face.delete",
+      "params": {
+        "body": "Turned part",
+        "faces": [
+          "F2:side:l9",
+          "F2:side:l8",
+          "F2:side:l7"
+        ],
+        "heal": true
+      }
+    },
+    {
+      "command": "inspect.measure",
+      "params": {
+        "bodies": [
+          "Turned part"
+        ]
+      }
+    },
+    {
+      "command": "model.faces",
+      "params": {
+        "body": "Turned part"
+      }
+    }
+  ]
+}
