@@ -1,8 +1,8 @@
 # Windows verification for the ball-to-plate bevel
 
-The Windows desktop and CLI were built from Git tree `c93aa5a831370720dfe1363fb9dcf04dd88bb6c7` on upstream base `4c275ffb7dbde7a8d686b7b69e1debc1087d8f66`.
+The Windows CLI and desktop were built from Git tree `59b86910bef91667a8b9e8dbb0de8ffc8e6065f4`, based on upstream commit `40c61c35383d697b06a026462ee1ef8a2328a4ab`.
 
-The original beveled model has five faces and a volume of 497.418837 mm³. Removing the selected bevel produced one closed shell with four selectable faces. Its volume of 485.899664 mm³ and area of 552.920307 mm² agree with the independently constructed sharp part.
+The beveled part has five faces and a volume of 497.418837 mm³. Removing the conical face gives one closed shell with four selectable faces. Its volume of 485.899664 mm³ and area of 552.920307 mm² agree with the independent sharp part. Seven point classifications check the outer boundary and both surfaces formerly buried inside the solid.
 
 | Input to Delete Face | Faces after healing | Original four face names preserved | Saved design reopened |
 |---|---:|---|---|
@@ -12,14 +12,14 @@ The original beveled model has five faces and a volume of 497.418837 mm³. Remov
 | Plate rotated 90° and translated | 4 | Yes | Passed |
 | Oblique plate translated away from the origin | 4 | Yes | Passed |
 
-All five cases ran with per-step validation. Seven point classifications verified the exposed surface, the former buried cap and disc, and the space left by the removed bevel. The same geometry, point classifications, retained face names and feature history were recovered when each saved design reopened.
+The native and transformed designs retained `F1:bottom`, `F1:side`, `F1:top` and `F2:face:3`. In the imported STEP these same four faces retained `F3:face:2`, `F3:face:0`, `F3:face:1` and `F3:face:3`. Each case ran with per-step validation. Reopening each design reproduced its face names, feature history and measurements.
 
-The standalone Windows desktop opened the original 0.45.0 design, removed the conical face by its saved name and rendered both stages on its GPU. The healed native, STEP and oblique designs were each exported to STEP and read into a fresh application session. All three readbacks had four faces and the expected volume, area and seven point classifications.
+The standalone desktop removed the bevel by its saved name from the 0.45.0 design and rendered both states on the GPU. Exporting the healed native, STEP and oblique designs to STEP and opening them in fresh sessions reproduced the four faces, mass properties and seven point classifications.
 
-Two negative cases put a spherical void of radius 0.1 mm inside the original bevel. At a center height of 0 mm the command reported that the patch intersects retained face 5. At 0.25 mm it reported that the patch would enclose retained face 5. Both refusals preserved the measured body, all selectable faces, control-point classifications and the existing feature history in the same live session.
+Two negative cases cut a spherical void of radius 0.1 mm into the bevel. With its center on the replacement plane the command reported that the patch intersects retained face 5. With its center 0.25 mm above the plane the command reported that the patch would enclose that face. Each refusal preserved all selectable faces, mass properties, point classifications and feature history in the same live session.
 
-The posted `bevel-removal-inspection.sc` was reopened from otherwise empty directories using both SolidCraft 0.45.0 and this candidate. All four displayed bodies matched their expected volumes and were closed. The rebuilt editable comparison also reopened with its Delete Face feature intact.
+The posted inspection model opened from an otherwise empty directory in both SolidCraft 0.45.0 and this build. The editable comparison file also reopened, with **Add the bevel** and **Remove the bevel** in its feature history. The five-case measurement summary, both desktop GPU captures and the comparison preview were byte-identical to the previous Windows verification.
 
-The Windows CLI SHA-256 is `a78652a7cd0ac1185d4982c7cc1b0385890f48ccdc7d24f955b61335736ab6ef`.
+The Windows CLI SHA-256 is `fe0ff00bba97ca9996a709baf88f961af81d416b7d8f6841523f855ce803a152`.
 
 [Desktop before removal](desktop-before.png) · [Desktop after removal](desktop-after.png) · [Windows command measurements](windows-command-results.json) · [Comparison with editable Delete Face feature](bevel-removal-comparison.sc)
