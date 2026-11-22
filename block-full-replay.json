@@ -1,0 +1,129 @@
+{
+  "commands": [
+    {
+      "command": "solid.box",
+      "params": {
+        "length": 20,
+        "width": 12,
+        "height": 8,
+        "body_name": "Rounded block",
+        "name": "Block"
+      }
+    },
+    {
+      "command": "solid.fillet",
+      "params": {
+        "body": "Rounded block",
+        "edges": [
+          [
+            0,
+            0,
+            4
+          ],
+          [
+            20,
+            0,
+            4
+          ],
+          [
+            20,
+            12,
+            4
+          ],
+          [
+            0,
+            12,
+            4
+          ]
+        ],
+        "radius": 3,
+        "tangent_chain": false,
+        "name": "Round four upright edges"
+      }
+    },
+    {
+      "command": "solid.fillet",
+      "params": {
+        "body": "Rounded block",
+        "edges": [
+          [
+            10,
+            0,
+            8
+          ]
+        ],
+        "radius": 1,
+        "tangent_chain": true,
+        "name": "Round the eight top edges"
+      }
+    },
+    {
+      "command": "face.delete",
+      "params": {
+        "body": "Rounded block",
+        "faces": [
+          "F3:blend(F1:+y|F1:+z)",
+          "F3:blend(F1:+z|F2:blend(F1:+y|F1:-x))",
+          "F3:blend(F1:+z|F1:-x)",
+          "F3:blend(F1:+z|F2:blend(F1:-x|F1:-y))",
+          "F3:blend(F1:+z|F1:-y)",
+          "F3:blend(F1:+z|F2:blend(F1:+x|F1:-y))",
+          "F3:blend(F1:+x|F1:+z)",
+          "F3:blend(F1:+z|F2:blend(F1:+x|F1:+y))"
+        ],
+        "heal": true,
+        "name": "Remove the top rim round"
+      }
+    },
+    {
+      "command": "model.faces",
+      "params": {
+        "body": "Rounded block"
+      }
+    },
+    {
+      "command": "inspect.classify_points",
+      "params": {
+        "body": "Rounded block",
+        "points": [
+          [
+            10,
+            1,
+            7
+          ],
+          [
+            10,
+            0.12,
+            7.88
+          ],
+          [
+            10,
+            -0.01,
+            7.88
+          ],
+          [
+            0.2,
+            0.2,
+            4
+          ],
+          [
+            10,
+            6,
+            8
+          ],
+          [
+            10,
+            6,
+            4
+          ]
+        ]
+      }
+    },
+    {
+      "command": "inspect.measure",
+      "params": {
+        "body": "Rounded block"
+      }
+    }
+  ]
+}

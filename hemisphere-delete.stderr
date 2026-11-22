@@ -1,0 +1,1 @@
+error: step 4 (face.delete): invalid input: Delete Face: face 0 (a free-form (spline) face), borders face 3, a sphere: include face 3 in the selection if it should go too, or take off the feature that made face 3 in the timeline instead; only planar neighbours can extend to close the gap

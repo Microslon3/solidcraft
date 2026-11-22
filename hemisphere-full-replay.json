@@ -1,0 +1,113 @@
+{
+  "commands": [
+    {
+      "command": "solid.sphere",
+      "params": {
+        "radius": 5,
+        "center": [
+          0,
+          0,
+          0
+        ],
+        "body_name": "Hemisphere",
+        "name": "Sphere"
+      }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "corner": [
+          -6,
+          -6,
+          0
+        ],
+        "length": 12,
+        "width": 12,
+        "height": 6,
+        "operation": "intersect",
+        "targets": [
+          "Hemisphere"
+        ],
+        "name": "Keep the upper half"
+      }
+    },
+    {
+      "command": "solid.fillet",
+      "params": {
+        "body": "Hemisphere",
+        "edges": [
+          [
+            0,
+            5,
+            0
+          ]
+        ],
+        "radius": 1,
+        "tangent_chain": true,
+        "name": "Round the rim"
+      }
+    },
+    {
+      "command": "face.delete",
+      "params": {
+        "body": "Hemisphere",
+        "faces": [
+          "F3:blend(F1:face:0|F2:-z~1)#1",
+          "F3:blend(F1:face:0|F2:-z~1)#2"
+        ],
+        "heal": true,
+        "name": "Remove the top rim round"
+      }
+    },
+    {
+      "command": "model.faces",
+      "params": {
+        "body": "Hemisphere"
+      }
+    },
+    {
+      "command": "inspect.classify_points",
+      "params": {
+        "body": "Hemisphere",
+        "points": [
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            4.7,
+            0,
+            0.05
+          ],
+          [
+            5.01,
+            0,
+            0.02
+          ],
+          [
+            0,
+            0,
+            -0.02
+          ],
+          [
+            0,
+            0,
+            5
+          ],
+          [
+            0,
+            4.9,
+            0.05
+          ]
+        ]
+      }
+    },
+    {
+      "command": "inspect.measure",
+      "params": {
+        "body": "Hemisphere"
+      }
+    }
+  ]
+}
