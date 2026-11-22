@@ -18,7 +18,7 @@ solidcraft-cli run ball-plate-full-replay.json --validation each_step --results 
 | Open rim with a through hole | 5 | 1849.8274273594 | 1016.6869335978 |
 | Ball on a plate | 2 | 485.8996637552 | 552.9203070318 |
 
-SolidCraft 0.45.0 refused all eight selections across the four native designs and their STEP versions. The release report records those errors and the selected faces. [Release results](release-0.45.0-results.json)
+SolidCraft 0.45.0 and the installed Windows release 0.46.2 each refused all eight selections across the four native designs and their STEP versions. The reports record the command errors, selected faces and unhealed controls. [0.45.0 results](release-0.45.0-results.json), [0.46.2 results and installed binary SHA-256](release-0.46.2-results.json)
 
 The Windows build of source tree `b11669277fd6e2405f41fcde5da1ee78876b96c5` healed all eight selections. Each saved design reopened with the same retained face names, solid measurements and point classifications. Five incomplete or disconnected selections left the original design intact. Each pair of `*-rounded.png` and `*-healed.png` images shows the input and the actual operation result from the same camera. The four healed images match the corresponding sharp reference models pixel for pixel. [Windows measurements and binary SHA-256](windows-results.json)
 
