@@ -1,0 +1,72 @@
+{
+  "command_comparison": {
+    "tangent": {
+      "cavity_center_z_mm": -0.1,
+      "contact_in_model_without_cavity": "inside",
+      "contact_in_beveled_model": {
+        "class": "on",
+        "face": "F4:face:5",
+        "normal": [
+          -4.440892098500627e-15,
+          -0.0,
+          -1.0
+        ]
+      },
+      "cavity_face": "F4:face:5",
+      "input_volume_mm3": 497.41464802817933,
+      "outcome": "refused",
+      "detail": "tangent-after: error: step 1 (face.delete): Delete Face: blend::feature_executive: the patch intersects retained face 5"
+    },
+    "clear": {
+      "cavity_center_z_mm": -0.105,
+      "contact_in_model_without_cavity": "inside",
+      "contact_in_beveled_model": {
+        "class": "inside"
+      },
+      "cavity_face": "F4:face:5",
+      "input_volume_mm3": 497.41464802817933,
+      "outcome": "accepted",
+      "closed": true,
+      "faces": 5,
+      "volume_mm3": 485.8954749650168,
+      "classified_point": {
+        "class": "on",
+        "face": "F1:top",
+        "normal": [
+          0.0,
+          -0.0,
+          1.0
+        ]
+      }
+    }
+  },
+  "live_state_after_tangent_refusal": {
+    "refusal": [
+      {
+        "text": "Delete Face: blend::feature_executive: the patch intersects retained face 5",
+        "type": "text"
+      }
+    ],
+    "identical_measures_faces_witnesses_features": true
+  },
+  "clearance_measurements": {
+    "cavity_center_z_mm": -0.105,
+    "clearance_mm": 0.005,
+    "volume_mm3": 485.8954749650168,
+    "area_mm2": 553.0459707379473,
+    "closed": true,
+    "kernel": {
+      "edges": 7,
+      "faces": 5,
+      "shells": 2,
+      "vertices": 7
+    },
+    "cavity_face": "F4:face:5",
+    "probe_classes": [
+      "on",
+      "outside",
+      "on",
+      "outside"
+    ]
+  }
+}
