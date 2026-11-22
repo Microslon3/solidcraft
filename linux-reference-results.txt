@@ -1,0 +1,10 @@
+The two reference suites used by the ring-groove change ran against this Git tree on Linux x86_64.
+Source commit 499b7554cfdcd5baa1f513b4c6a3f17cd704ddd2
+Source tree 1b0a4f8d865539851743cb6bb202df6c0c6f0303
+Rust 1.99.1
+Command from the solidcore directory
+cargo run --locked --profile goldens -p goldens -- --unit blend.feature_executive --unit topology.brep_p5 --goldens
+
+PASS blend.feature_executive cases=149 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=231.854s
+PASS topology.brep_p5 cases=797 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=0.132s
+goldens: 2 unit(s), 2 passed, 0 failed
