@@ -1,0 +1,8 @@
+step-open-bore FEV=[9, 21, 14] volume=1849.827427359360 area=1016.686933597791 manifold=true outward=true Level2=[]
+native-open-bore FEV=[9, 21, 14] volume=1849.827427359360 area=1016.686933597791 manifold=true outward=true Level2=[]
+step-block FEV=[10, 24, 16] volume=1858.194671058465 area=935.345115136926 manifold=true outward=true Level2=[]
+native-block FEV=[10, 24, 16] volume=1858.194671058465 area=935.345115136926 manifold=true outward=true Level2=[]
+step-hemisphere FEV=[2, 3, 3] volume=261.799387799149 area=235.619449019234 manifold=true outward=true Level2=[]
+native-hemisphere FEV=[2, 3, 3] volume=261.799387799149 area=235.619449019235 manifold=true outward=true Level2=[]
+step-ball-plate FEV=[4, 6, 5] volume=485.899663755221 area=552.920307031804 manifold=true outward=true Level2=[]
+native-ball-plate FEV=[4, 6, 5] volume=485.899663755221 area=552.920307031804 manifold=true outward=true Level2=[]

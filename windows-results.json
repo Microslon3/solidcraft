@@ -1,0 +1,418 @@
+{
+  "version": "solidcraft-cli 0.46.2",
+  "source_tree": "b11669277fd6e2405f41fcde5da1ee78876b96c5",
+  "base_commit": "5580b969897e03fe01f3dbac0b2675ee5acdb259",
+  "windows_binary_sha256": "424b45d836cbcf22e0a03a225a8ce48782f2b8898749e33f6642aa70993478b0",
+  "units": {
+    "volume": "mm3",
+    "area": "mm2"
+  },
+  "cases": {
+    "open-bore-sc": {
+      "selected": [
+        "F4:blend(F1:+z|F1:-y)",
+        "F4:blend(F1:+x|F1:+z)",
+        "F4:blend(F1:+y|F1:+z)",
+        "F4:blend(F1:+z|F2:blend(F1:+x|F1:-y))",
+        "F4:blend(F1:+z|F2:blend(F1:+x|F1:+y))"
+      ],
+      "reopened": true,
+      "closed": true,
+      "kernel": {
+        "edges": 21,
+        "faces": 9,
+        "shells": 1,
+        "vertices": 14
+      },
+      "volume": 1849.8274273593604,
+      "area": 1016.6869335977908,
+      "point_classes": [
+        "inside",
+        "inside",
+        "outside",
+        "outside",
+        "outside",
+        "outside",
+        "on",
+        "on",
+        "inside"
+      ],
+      "surviving_face_names": [
+        "F1:+z",
+        "F1:-z",
+        "F1:-y",
+        "F1:+x",
+        "F1:+y",
+        "F1:-x",
+        "F3:side",
+        "F2:blend(F1:+x|F1:-y)",
+        "F2:blend(F1:+x|F1:+y)"
+      ],
+      "open_control_faces": 9
+    },
+    "open-bore-step": {
+      "selected": [
+        "F3:face:11",
+        "F3:face:13",
+        "F3:face:1",
+        "F3:face:12",
+        "F3:face:0"
+      ],
+      "reopened": true,
+      "closed": true,
+      "kernel": {
+        "edges": 21,
+        "faces": 9,
+        "shells": 1,
+        "vertices": 14
+      },
+      "volume": 1849.8274273593604,
+      "area": 1016.6869335977908,
+      "point_classes": [
+        "inside",
+        "inside",
+        "outside",
+        "outside",
+        "outside",
+        "outside",
+        "on",
+        "on",
+        "inside"
+      ],
+      "surviving_face_names": [
+        "F3:face:3",
+        "F3:face:5",
+        "F3:face:10",
+        "F3:face:8",
+        "F3:face:6",
+        "F3:face:2",
+        "F3:face:4",
+        "F3:face:9",
+        "F3:face:7"
+      ],
+      "open_control_faces": 9
+    },
+    "block-sc": {
+      "selected": [
+        "F3:blend(F1:+z|F1:-y)",
+        "F3:blend(F1:+x|F1:+z)",
+        "F3:blend(F1:+y|F1:+z)",
+        "F3:blend(F1:+z|F1:-x)",
+        "F3:blend(F1:+z|F2:blend(F1:-x|F1:-y))",
+        "F3:blend(F1:+z|F2:blend(F1:+y|F1:-x))",
+        "F3:blend(F1:+z|F2:blend(F1:+x|F1:-y))",
+        "F3:blend(F1:+z|F2:blend(F1:+x|F1:+y))"
+      ],
+      "reopened": true,
+      "closed": true,
+      "kernel": {
+        "edges": 24,
+        "faces": 10,
+        "shells": 1,
+        "vertices": 16
+      },
+      "volume": 1858.1946710584652,
+      "area": 935.3451151369263,
+      "point_classes": [
+        "inside",
+        "inside",
+        "outside",
+        "outside",
+        "on",
+        "inside"
+      ],
+      "surviving_face_names": [
+        "F1:+z",
+        "F1:-z",
+        "F1:-y",
+        "F1:+x",
+        "F1:+y",
+        "F1:-x",
+        "F2:blend(F1:-x|F1:-y)",
+        "F2:blend(F1:+y|F1:-x)",
+        "F2:blend(F1:+x|F1:-y)",
+        "F2:blend(F1:+x|F1:+y)"
+      ],
+      "open_control_faces": 10
+    },
+    "block-step": {
+      "selected": [
+        "F3:face:4",
+        "F3:face:6",
+        "F3:face:0",
+        "F3:face:2",
+        "F3:face:3",
+        "F3:face:1",
+        "F3:face:5",
+        "F3:face:7"
+      ],
+      "reopened": true,
+      "closed": true,
+      "kernel": {
+        "edges": 24,
+        "faces": 10,
+        "shells": 1,
+        "vertices": 16
+      },
+      "volume": 1858.1946710584652,
+      "area": 935.3451151369263,
+      "point_classes": [
+        "inside",
+        "inside",
+        "outside",
+        "outside",
+        "on",
+        "inside"
+      ],
+      "surviving_face_names": [
+        "F3:face:17",
+        "F3:face:16",
+        "F3:face:13",
+        "F3:face:15",
+        "F3:face:9",
+        "F3:face:11",
+        "F3:face:12",
+        "F3:face:10",
+        "F3:face:14",
+        "F3:face:8"
+      ],
+      "open_control_faces": 10
+    },
+    "hemisphere-sc": {
+      "selected": [
+        "F3:blend(F1:face:0|F2:-z~1)#2",
+        "F3:blend(F1:face:0|F2:-z~1)#1"
+      ],
+      "reopened": true,
+      "closed": true,
+      "kernel": {
+        "edges": 3,
+        "faces": 2,
+        "shells": 1,
+        "vertices": 3
+      },
+      "volume": 261.7993877991494,
+      "area": 235.61944901923448,
+      "point_classes": [
+        "inside",
+        "inside",
+        "outside",
+        "outside",
+        "on",
+        "inside"
+      ],
+      "surviving_face_names": [
+        "F1:face:0",
+        "F2:-z"
+      ],
+      "open_control_faces": 2
+    },
+    "hemisphere-step": {
+      "selected": [
+        "F3:face:1",
+        "F3:face:0"
+      ],
+      "reopened": true,
+      "closed": true,
+      "kernel": {
+        "edges": 3,
+        "faces": 2,
+        "shells": 1,
+        "vertices": 3
+      },
+      "volume": 261.7993877991493,
+      "area": 235.61944901923434,
+      "point_classes": [
+        "inside",
+        "inside",
+        "outside",
+        "outside",
+        "on",
+        "inside"
+      ],
+      "surviving_face_names": [
+        "F3:face:3",
+        "F3:face:2"
+      ],
+      "open_control_faces": 2
+    },
+    "ball-plate-sc": {
+      "selected": [
+        "F3:blend(F1:top|F2:face:3~2)#2",
+        "F3:blend(F1:top|F2:face:3~2)#1"
+      ],
+      "reopened": true,
+      "closed": true,
+      "kernel": {
+        "edges": 6,
+        "faces": 4,
+        "shells": 1,
+        "vertices": 5
+      },
+      "volume": 485.8996637552215,
+      "area": 552.9203070318036,
+      "point_classes": [
+        "inside",
+        "inside",
+        "outside",
+        "on",
+        "on",
+        "on",
+        "outside"
+      ],
+      "surviving_face_names": [
+        "F1:bottom",
+        "F1:side",
+        "F1:top",
+        "F2:face:3"
+      ],
+      "open_control_faces": 4
+    },
+    "ball-plate-step": {
+      "selected": [
+        "F3:face:1",
+        "F3:face:2"
+      ],
+      "reopened": true,
+      "closed": true,
+      "kernel": {
+        "edges": 6,
+        "faces": 4,
+        "shells": 1,
+        "vertices": 5
+      },
+      "volume": 485.8996637552212,
+      "area": 552.9203070318034,
+      "point_classes": [
+        "inside",
+        "inside",
+        "outside",
+        "on",
+        "on",
+        "on",
+        "outside"
+      ],
+      "surviving_face_names": [
+        "F3:face:5",
+        "F3:face:4",
+        "F3:face:3",
+        "F3:face:0"
+      ],
+      "open_control_faces": 4
+    }
+  },
+  "incomplete_selections": {
+    "hemisphere-single": {
+      "selection": [
+        "F3:blend(F1:face:0|F2:-z~1)#1"
+      ],
+      "error": [
+        {
+          "text": "invalid input: Delete Face: face 0 (a free-form (spline) face), borders face 1, a free-form (spline) face: to remove a tangent chain of rounds, select all the round faces. Include face 1 if it should go too, or take off the feature that made it in the timeline",
+          "type": "text"
+        }
+      ],
+      "same_face_names_measures_features": true
+    },
+    "block-single": {
+      "selection": [
+        "F3:blend(F1:+y|F1:+z)"
+      ],
+      "error": [
+        {
+          "text": "invalid input: Delete Face: face 0 (a cylinder), borders face 1, a free-form (spline) face: to remove a tangent chain of rounds, select all the round faces. Include face 1 if it should go too, or take off the feature that made it in the timeline",
+          "type": "text"
+        }
+      ],
+      "same_face_names_measures_features": true
+    },
+    "block-disconnected": {
+      "selection": [
+        "F3:blend(F1:+y|F1:+z)",
+        "F3:blend(F1:+z|F1:-y)"
+      ],
+      "error": [
+        {
+          "text": "invalid input: Delete Face: face 0 (a cylinder), borders face 1, a free-form (spline) face: to remove a tangent chain of rounds, select all the round faces. Include face 1 if it should go too, or take off the feature that made it in the timeline",
+          "type": "text"
+        }
+      ],
+      "same_face_names_measures_features": true
+    },
+    "open-bore-single": {
+      "selection": [
+        "F4:blend(F1:+z|F2:blend(F1:+x|F1:+y))"
+      ],
+      "error": [
+        {
+          "text": "invalid input: Delete Face: face 0 (a free-form (spline) face), borders face 1, a cylinder: to remove a tangent chain of rounds, select all the round faces. Include face 1 if it should go too, or take off the feature that made it in the timeline",
+          "type": "text"
+        }
+      ],
+      "same_face_names_measures_features": true
+    },
+    "open-bore-disconnected": {
+      "selection": [
+        "F4:blend(F1:+y|F1:+z)",
+        "F4:blend(F1:+z|F1:-y)"
+      ],
+      "error": [
+        {
+          "text": "invalid input: Delete Face: face 1 (a cylinder), borders face 0, a free-form (spline) face: to remove a tangent chain of rounds, select all the round faces. Include face 0 if it should go too, or take off the feature that made it in the timeline",
+          "type": "text"
+        }
+      ],
+      "same_face_names_measures_features": true
+    }
+  },
+  "replays_from_empty": {
+    "open-bore": {
+      "closed": true,
+      "volume_mm3": 1849.8274273593604,
+      "area_mm2": 1016.6869335977908,
+      "kernel": {
+        "edges": 21,
+        "faces": 9,
+        "shells": 1,
+        "vertices": 14
+      },
+      "measured_by": "smlib"
+    },
+    "block": {
+      "closed": true,
+      "volume_mm3": 1858.1946710584652,
+      "area_mm2": 935.3451151369263,
+      "kernel": {
+        "edges": 24,
+        "faces": 10,
+        "shells": 1,
+        "vertices": 16
+      },
+      "measured_by": "smlib"
+    },
+    "hemisphere": {
+      "closed": true,
+      "volume_mm3": 261.7993877991494,
+      "area_mm2": 235.61944901923448,
+      "kernel": {
+        "edges": 3,
+        "faces": 2,
+        "shells": 1,
+        "vertices": 3
+      },
+      "measured_by": "smlib"
+    },
+    "ball-plate": {
+      "closed": true,
+      "volume_mm3": 485.8996637552215,
+      "area_mm2": 552.9203070318036,
+      "kernel": {
+        "edges": 6,
+        "faces": 4,
+        "shells": 1,
+        "vertices": 5
+      },
+      "measured_by": "smlib"
+    }
+  }
+}

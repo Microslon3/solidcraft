@@ -1,0 +1,45 @@
+case=hemisphere-rim-round-deleted
+sharp FEV=[2, 3, 3] volume=261.799387799149 area=235.619449019235 manifold=true outward=true Level2=[]
+rounded FEV=[4, 7, 5] volume=252.570313574723 area=217.161300570382 manifold=true outward=true Level2=[]
+raw FaceId(2): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(3): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+case=ball-on-plate-root-round-deleted
+sharp FEV=[4, 6, 5] volume=485.899663755221 area=552.920307031804 manifold=true outward=true Level2=[]
+rounded FEV=[6, 10, 7] volume=491.293196181761 area=542.133242178724 manifold=true outward=true Level2=[]
+raw FaceId(4): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(5): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+case=rounded-box-top-rim-chain-deleted
+sharp FEV=[10, 24, 16] volume=1858.194671058465 area=935.345115136926 manifold=true outward=true Level2=[]
+rounded FEV=[18, 40, 24] volume=1845.866633829897 area=909.641843128593 manifold=true outward=true Level2=[]
+raw FaceId(10): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(12): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(16): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(15): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(11): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(14): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(13): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(17): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+case=domed-post-cap-turned-rounds-deleted
+sharp FEV=[3, 5, 4] volume=356.047167406843 area=263.893782901251 manifold=true outward=true Level2=[]
+rounded FEV=[5, 9, 6] volume=355.683086219238 area=263.119066915230 manifold=true outward=true Level2=[]
+raw FaceId(3): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(4): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+case=double-frustum-turned-rounds-deleted
+sharp FEV=[4, 6, 4] volume=368.613538021202 area=263.193483068962 manifold=true outward=true Level2=[]
+rounded FEV=[6, 10, 6] volume=366.643796078743 area=258.835120163588 manifold=true outward=true Level2=[]
+raw FaceId(4): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(5): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+case=turned-post-cone-turned-rounds-deleted
+sharp FEV=[4, 6, 4] volume=634.601716025138 area=389.557489045134 manifold=true outward=true Level2=[]
+rounded FEV=[6, 10, 6] volume=634.240795869333 area=388.765835563326 manifold=true outward=true Level2=[]
+raw FaceId(4): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(5): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+case=sectioned-rounded-box-open-chain
+sharp FEV=[8, 18, 12] volume=929.097335529233 area=627.672557568463 manifold=true outward=true Level2=[]
+rounded FEV=[13, 29, 18] volume=922.933316914948 area=614.391717891091 manifold=true outward=true Level2=[]
+raw FaceId(10): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(7): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(8): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:467 })
+raw FaceId(9): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:483 })
+raw FaceId(11): Failed(Failure { operation: "blend::fillet_removal", reason: Blend(RemovalRefused(AdjacentEdgesTangent)), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates/solidcore/src/blend/fillet_removal.rs:483 })
+23/23

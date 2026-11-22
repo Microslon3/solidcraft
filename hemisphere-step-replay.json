@@ -1,0 +1,93 @@
+{
+  "commands": [
+    {
+      "command": "face.delete",
+      "params": {
+        "body": "Hemisphere",
+        "faces": [
+          [
+            -3.350985223221625,
+            -3.350985223221625,
+            0.5
+          ],
+          [
+            3.350985223221625,
+            3.350985223221625,
+            0.5
+          ]
+        ],
+        "heal": true
+      }
+    },
+    {
+      "command": "model.faces",
+      "params": {
+        "body": "Hemisphere"
+      }
+    },
+    {
+      "command": "inspect.classify_points",
+      "params": {
+        "body": "Hemisphere",
+        "points": [
+          [
+            1.8,
+            2.4,
+            4
+          ],
+          [
+            0,
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "command": "inspect.classify_points",
+      "params": {
+        "body": "Hemisphere",
+        "points": [
+          [
+            0,
+            0,
+            2
+          ],
+          [
+            4.7,
+            0,
+            0.05
+          ],
+          [
+            5.01,
+            0,
+            0.02
+          ],
+          [
+            0,
+            0,
+            -0.02
+          ],
+          [
+            0,
+            0,
+            5
+          ],
+          [
+            0,
+            4.9,
+            0.05
+          ]
+        ]
+      }
+    },
+    {
+      "command": "inspect.measure",
+      "params": {
+        "bodies": [
+          "Hemisphere"
+        ]
+      }
+    }
+  ]
+}

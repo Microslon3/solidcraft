@@ -1,0 +1,119 @@
+{
+  "commands": [
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "base": [
+          0,
+          0,
+          -2
+        ],
+        "radius": 8,
+        "height": 2,
+        "body_name": "Ball and plate",
+        "operation": "new",
+        "name": "Plate"
+      }
+    },
+    {
+      "command": "solid.sphere",
+      "params": {
+        "center": [
+          0,
+          0,
+          1
+        ],
+        "radius": 3,
+        "operation": "join",
+        "targets": [
+          "Ball and plate"
+        ],
+        "name": "Ball"
+      }
+    },
+    {
+      "command": "solid.fillet",
+      "params": {
+        "body": "Ball and plate",
+        "edges": [
+          [
+            0,
+            2.8284271247461903,
+            0
+          ]
+        ],
+        "radius": 1,
+        "tangent_chain": true,
+        "name": "Round the ball root"
+      }
+    },
+    {
+      "command": "face.delete",
+      "params": {
+        "body": "Ball and plate",
+        "faces": [
+          "F3:blend(F1:top|F2:face:3~2)#1",
+          "F3:blend(F1:top|F2:face:3~2)#2"
+        ],
+        "heal": true
+      }
+    },
+    {
+      "command": "model.faces",
+      "params": {
+        "body": "Ball and plate"
+      }
+    },
+    {
+      "command": "inspect.classify_points",
+      "params": {
+        "body": "Ball and plate",
+        "points": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            2.23606797749979,
+            0,
+            -1
+          ],
+          [
+            0,
+            3.1,
+            0.3
+          ],
+          [
+            0,
+            2.8284271247461903,
+            0
+          ],
+          [
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            7,
+            0
+          ],
+          [
+            0,
+            8.5,
+            -1
+          ]
+        ]
+      }
+    },
+    {
+      "command": "inspect.measure",
+      "params": {
+        "bodies": [
+          "Ball and plate"
+        ]
+      }
+    }
+  ]
+}

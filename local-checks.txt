@@ -1,0 +1,21 @@
+Local source and results for SolidCraft #19623
+Base commit  5580b969897e03fe01f3dbac0b2675ee5acdb259
+Patched tree b11669277fd6e2405f41fcde5da1ee78876b96c5
+
+Delete Face command area
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 1042 filtered out; finished in 0.93s
+
+Fillet removal kernel tests
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 799 filtered out; finished in 89.73s
+
+Application tests selected by cargo xtask fast
+Summary [1554.425s] 8030 tests run: 8012 passed (22 slow), 18 failed, 50 skipped
+known-failing: 8027 ran, 8009 pass, 18 known failing, 2 listed did not run here; no regression
+
+Golden corpus on the base commit
+PASS blend.fillet_removal cases=170 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=278.270s
+PASS surface.surface_p2 cases=17593 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=289.729s
+
+Golden corpus on the patched tree
+PASS blend.fillet_removal cases=170 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=462.933s
+PASS surface.surface_p2 cases=17593 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=414.935s

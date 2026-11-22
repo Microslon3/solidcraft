@@ -1,0 +1,5 @@
+domed-post-cap-turned-rounds-deleted FEV=[3, 5, 4] volume=356.047167406843 area=263.893782901131 manifold=true outward=true Level2=[]
+double-frustum-turned-rounds-deleted FEV=[4, 6, 4] volume=368.613538021202 area=263.193483068949 manifold=true outward=true Level2=[]
+turned-post-cone-turned-rounds-deleted FEV=[4, 6, 4] volume=634.601716025138 area=389.557489045007 manifold=true outward=true Level2=[]
+hemisphere-rim-round-deleted FEV=[2, 3, 3] volume=261.799387799149 area=235.619449019235 manifold=true outward=true Level2=[]
+ball-on-plate-root-round-deleted FEV=[4, 6, 5] volume=485.899663755221 area=552.920307031804 manifold=true outward=true Level2=[]
