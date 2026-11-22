@@ -1,0 +1,22 @@
+baseline-sharp topology=[4, 6, 5] all_valid=true outward=true volume=Ok(485.89966375522135) area=Ok(552.9203070318038)
+baseline-sharp trimmed faces at sphere-plane seam: [FaceId(1), FaceId(3)]
+baseline-sharp trimmed faces at inside plate disc: []
+baseline-sharp trimmed faces at buried spherical cap: []
+baseline-sharp trimmed faces at bevel: []
+baseline-input topology=[5, 7, 5] all_valid=true outward=true volume=Ok(497.41883681838385) area=Ok(540.0381904486553)
+baseline-input trimmed faces at sphere-plane seam: []
+baseline-input trimmed faces at inside plate disc: []
+baseline-input trimmed faces at buried spherical cap: []
+baseline-input trimmed faces at bevel: [FaceId(4)]
+added Some(0)
+restored features []
+baseline-deleted topology=[6, 7, 6] all_valid=true outward=true volume=Ok(515.221195188726) area=Ok(615.7521601035997)
+baseline-deleted trimmed faces at sphere-plane seam: [FaceId(5), FaceId(6)]
+baseline-deleted trimmed faces at inside plate disc: [FaceId(5)]
+baseline-deleted trimmed faces at buried spherical cap: [FaceId(6)]
+baseline-deleted trimmed faces at bevel: []
+baseline-feature topology=[3, 4, 3] all_valid=true outward=false volume=Ok(-17.802358370342173) area=Ok(137.91433078916148)
+baseline-feature trimmed faces at sphere-plane seam: [FaceId(1), FaceId(2)]
+baseline-feature trimmed faces at inside plate disc: [FaceId(1)]
+baseline-feature trimmed faces at buried spherical cap: [FaceId(2)]
+baseline-feature trimmed faces at bevel: [FaceId(0)]

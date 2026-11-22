@@ -1,0 +1,49 @@
+{
+  "baseline-input": {
+    "faces": 5,
+    "edges": 7,
+    "connected_face_groups": [
+      [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    ],
+    "plane_sphere_junction_edges": []
+  },
+  "baseline-deleted": {
+    "faces": 6,
+    "edges": 7,
+    "connected_face_groups": [
+      [
+        0,
+        1
+      ],
+      [
+        2,
+        3,
+        4,
+        5
+      ]
+    ],
+    "plane_sphere_junction_edges": []
+  },
+  "baseline-sharp": {
+    "faces": 4,
+    "edges": 6,
+    "connected_face_groups": [
+      [
+        0,
+        1,
+        2,
+        3
+      ]
+    ],
+    "plane_sphere_junction_edges": [
+      3,
+      4
+    ]
+  }
+}

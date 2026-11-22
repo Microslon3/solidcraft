@@ -1,0 +1,33 @@
+{
+  "commands": [
+    {
+      "command": "solid.cylinder",
+      "params": {
+        "base": [
+          0,
+          0,
+          -2
+        ],
+        "radius": 8,
+        "height": 2,
+        "body_name": "Ball and plate",
+        "operation": "new"
+      }
+    },
+    {
+      "command": "solid.sphere",
+      "params": {
+        "center": [
+          0,
+          0,
+          1
+        ],
+        "radius": 3,
+        "operation": "join",
+        "targets": [
+          "Ball and plate"
+        ]
+      }
+    }
+  ]
+}
