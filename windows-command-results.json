@@ -1,0 +1,310 @@
+{
+  "built": {
+    "closed": true,
+    "shells": 1,
+    "faces": 4,
+    "kernel_faces": 4,
+    "kernel_edges": 6,
+    "kernel_vertices": 5,
+    "selectable_faces": 4,
+    "edges": 5,
+    "vertices": 4,
+    "volume_mm3": 485.8996637552216,
+    "area_mm2": 552.9203070318038,
+    "point_classes": [
+      "inside",
+      "inside",
+      "outside",
+      "on",
+      "on",
+      "on",
+      "outside"
+    ],
+    "retained_anchor_names": [
+      "F1:bottom",
+      "F1:side",
+      "F1:top",
+      "F2:face:3"
+    ],
+    "face_names": [
+      "F1:side",
+      "F1:top",
+      "F1:bottom",
+      "F2:face:3"
+    ],
+    "features": [
+      {
+        "id": 1,
+        "name": "Cylinder1"
+      },
+      {
+        "id": 2,
+        "name": "Sphere1"
+      },
+      {
+        "id": 3,
+        "name": "Cone1"
+      },
+      {
+        "id": 4,
+        "name": "DeleteFace1"
+      }
+    ],
+    "original_face_names": [
+      "F1:bottom",
+      "F1:side",
+      "F1:top",
+      "F2:face:3",
+      "F3:side"
+    ],
+    "reopened": true
+  },
+  "saved-0.45": {
+    "closed": true,
+    "shells": 1,
+    "faces": 4,
+    "kernel_faces": 4,
+    "kernel_edges": 6,
+    "kernel_vertices": 5,
+    "selectable_faces": 4,
+    "edges": 5,
+    "vertices": 4,
+    "volume_mm3": 485.8996637552216,
+    "area_mm2": 552.9203070318038,
+    "point_classes": [
+      "inside",
+      "inside",
+      "outside",
+      "on",
+      "on",
+      "on",
+      "outside"
+    ],
+    "retained_anchor_names": [
+      "F1:bottom",
+      "F1:side",
+      "F1:top",
+      "F2:face:3"
+    ],
+    "face_names": [
+      "F1:side",
+      "F1:top",
+      "F1:bottom",
+      "F2:face:3"
+    ],
+    "features": [
+      {
+        "id": 1,
+        "name": "Cylinder1"
+      },
+      {
+        "id": 2,
+        "name": "Sphere1"
+      },
+      {
+        "id": 3,
+        "name": "Cone1"
+      },
+      {
+        "id": 4,
+        "name": "DeleteFace1"
+      }
+    ],
+    "original_face_names": [
+      "F1:bottom",
+      "F1:side",
+      "F1:top",
+      "F2:face:3",
+      "F3:side"
+    ],
+    "reopened": true
+  },
+  "STEP": {
+    "closed": true,
+    "shells": 1,
+    "faces": 4,
+    "kernel_faces": 4,
+    "kernel_edges": 7,
+    "kernel_vertices": 6,
+    "selectable_faces": 4,
+    "edges": 5,
+    "vertices": 4,
+    "volume_mm3": 485.89966375522124,
+    "area_mm2": 552.9203070318038,
+    "point_classes": [
+      "inside",
+      "inside",
+      "outside",
+      "on",
+      "on",
+      "on",
+      "outside"
+    ],
+    "retained_anchor_names": [
+      "F3:face:2",
+      "F3:face:0",
+      "F3:face:1",
+      "F3:face:3"
+    ],
+    "face_names": [
+      "F3:face:3",
+      "F3:face:0",
+      "F3:face:1",
+      "F3:face:2"
+    ],
+    "features": [
+      {
+        "id": 3,
+        "name": "release-beveled"
+      },
+      {
+        "id": 4,
+        "name": "DeleteFace1"
+      }
+    ],
+    "original_face_names": [
+      "F3:face:2",
+      "F3:face:0",
+      "F3:face:1",
+      "F3:face:3",
+      "F3:face:4"
+    ],
+    "reopened": true
+  },
+  "rotated": {
+    "closed": true,
+    "shells": 1,
+    "faces": 4,
+    "kernel_faces": 4,
+    "kernel_edges": 6,
+    "kernel_vertices": 5,
+    "selectable_faces": 4,
+    "edges": 5,
+    "vertices": 4,
+    "volume_mm3": 485.89966375522135,
+    "area_mm2": 552.9203070318038,
+    "point_classes": [
+      "inside",
+      "inside",
+      "outside",
+      "on",
+      "on",
+      "on",
+      "outside"
+    ],
+    "retained_anchor_names": [
+      "F1:bottom",
+      "F1:side",
+      "F1:top",
+      "F2:face:3"
+    ],
+    "face_names": [
+      "F2:face:3",
+      "F1:side",
+      "F1:top",
+      "F1:bottom"
+    ],
+    "features": [
+      {
+        "id": 1,
+        "name": "Cylinder1"
+      },
+      {
+        "id": 2,
+        "name": "Sphere1"
+      },
+      {
+        "id": 3,
+        "name": "Cone1"
+      },
+      {
+        "id": 4,
+        "name": "Move1"
+      },
+      {
+        "id": 5,
+        "name": "Move2"
+      },
+      {
+        "id": 6,
+        "name": "DeleteFace1"
+      }
+    ],
+    "original_face_names": [
+      "F1:bottom",
+      "F1:side",
+      "F1:top",
+      "F2:face:3",
+      "F3:side"
+    ],
+    "reopened": true
+  },
+  "tilted": {
+    "closed": true,
+    "shells": 1,
+    "faces": 4,
+    "kernel_faces": 4,
+    "kernel_edges": 6,
+    "kernel_vertices": 5,
+    "selectable_faces": 4,
+    "edges": 5,
+    "vertices": 4,
+    "volume_mm3": 485.8996637552209,
+    "area_mm2": 552.9203070318038,
+    "point_classes": [
+      "inside",
+      "inside",
+      "outside",
+      "on",
+      "on",
+      "on",
+      "outside"
+    ],
+    "retained_anchor_names": [
+      "F1:bottom",
+      "F1:side",
+      "F1:top",
+      "F2:face:3"
+    ],
+    "face_names": [
+      "F2:face:3",
+      "F1:side",
+      "F1:top",
+      "F1:bottom"
+    ],
+    "features": [
+      {
+        "id": 1,
+        "name": "Cylinder1"
+      },
+      {
+        "id": 2,
+        "name": "Sphere1"
+      },
+      {
+        "id": 3,
+        "name": "Cone1"
+      },
+      {
+        "id": 4,
+        "name": "Move1"
+      },
+      {
+        "id": 5,
+        "name": "Move2"
+      },
+      {
+        "id": 6,
+        "name": "DeleteFace1"
+      }
+    ],
+    "original_face_names": [
+      "F1:bottom",
+      "F1:side",
+      "F1:top",
+      "F2:face:3",
+      "F3:side"
+    ],
+    "reopened": true
+  }
+}
