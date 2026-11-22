@@ -1,0 +1,134 @@
+{
+  "platform": "Windows x86_64-pc-windows-msvc",
+  "rust": "1.99.1",
+  "cargo_nextest": "0.9.150",
+  "run": "cargo nextest run --locked --cargo-profile goldens --no-fail-fast",
+  "packages": [
+    "diagnostics",
+    "nurbs-grid-mesh",
+    "solidcore",
+    "solidcore-cadir",
+    "solidcore-convert",
+    "solidcore-ops",
+    "solidcore-record",
+    "solidcore-ssi",
+    "solidcore-step",
+    "solidcore-tess",
+    "ssi",
+    "step-export",
+    "xtask"
+  ],
+  "upstream_test_data": "3fd5b9548d19aa8c12c29bc9637a96d42a06f8a5",
+  "base": {
+    "git_commit": "df08599943d96dfadc331ad6b1e3aee43ad50fc4",
+    "ran": 9433,
+    "passed": 9422,
+    "failed": 11,
+    "skipped": 81,
+    "binaries": 43
+  },
+  "candidate": {
+    "git_commit": "499b7554cfdcd5baa1f513b4c6a3f17cd704ddd2",
+    "ran": 9439,
+    "passed": 9428,
+    "failed": 11,
+    "skipped": 81,
+    "binaries": 43
+  },
+  "same_outcome_on_both_revisions": 9433,
+  "failures_with_identical_assertions": {
+    "solidcore blend::fillet_section::section::tests::equal_area_thumbweights_are_the_fork_s": [
+      "assertion `left == right` failed: n 2 alpha 1.5707963267948966: -0.5252124045875599",
+      "left: 13826277949179234018",
+      "right: 13826277949179234002"
+    ],
+    "solidcore boolean::topology_intersector::curved_strip::tests::the_strip_drop_keeps_the_curve_when_a_check_refuses": [
+      "called `Result::unwrap()` on an `Err` value: Failed(Failure { operation: \"boolean::merge::p2::make_faceuse\", reason: Boolean(StageFailed { stage: Relate, what: \"the related vertex is not an end of the edge use\" }), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates\\solidcore\\src\\error\\boolean.rs:266 })"
+    ],
+    "solidcore-convert::flat_parity every_corpus_body_comes_back_as_the_flat_export_wrote_it": [
+      "assertion `left == right` failed: assemblies\\cov-contact-check-touching-faces-do-not-overlap.json:b725: classes not as pinned",
+      "left: None",
+      "right: Some({\".edges[*].curve.end[*]\"})"
+    ],
+    "solidcore::blend brep_file_round_trip::bodies_round_trip_with_a_callers_identities": [
+      "assertion `left == right` failed",
+      "left: [14, 28, 17]",
+      "right: [12, 26, 17]"
+    ],
+    "solidcore::blend brep_file_round_trip::bodies_round_trip_with_their_own_identities": [
+      "assertion `left == right` failed",
+      "left: [14, 28, 17]",
+      "right: [12, 26, 17]"
+    ],
+    "solidcore::blend issue_2314_tab_corner_arcs::the_pair_is_the_sum_of_each_alone": [
+      "x > 0 alone 0.15913583972223933"
+    ],
+    "solidcore::blend issue_2365_nxn_setback_corners::every_box_corner_r3_setback_3_5_is_refused_naming_the_setback_that_builds": [
+      "Fillet Error: a setback of 3.5 is too short for the setback corner's fill to stay convex: a setback of 3.563 builds it"
+    ],
+    "solidcore::booleans issue_488_operand_trims::issue_17896_plane_line_trims_are_not_copied": [
+      "assertion `left == right` failed",
+      "left: 6.538881126861094e-5",
+      "right: 4e-5"
+    ],
+    "solidcore::geometry heal_edge_tolerance_covers_edge_face_gap::corpus_reads_change_only_the_covered_tolerances": [
+      "assertion `left == right` failed: [",
+      "\"Fillet/blade_hub_1.smb: read digest 0xc7f67de39540b843, main 0xda2e0b563fa35862\",",
+      "\"Fillet/blade_hub_1.smb: lazy trims digest 0xfa9ea7837c331c83, main 0x410172437ab22187\",",
+      "\"Fillet/blade_hub_1.smb: rebuilding read digest 0xd9580cf36d2b4dfd, main 0x41949589187dc360\",",
+      "\"Fillet/blade_hub_1.smb: area 0x40c8bf351a4d4318 / lowered 0x40c8bf351a4d4318, main 0x40c8bf351a4d4317\",",
+      "\"Fillet/blade_hub_1.smb: lowered volume 0x40cb1472e2cf47a4, main 0x40cb1472e2cf47a6\",",
+      "\"Fillet/blade_hub_2.smb: read digest 0x4fe42b58cc694aba, main 0x4830aab7f1df9f45\",",
+      "\"Fillet/blade_hub_2.smb: lazy trims digest 0xbacd09c989630ecf, main 0x8ce78a827602a435\",",
+      "\"Fillet/blade_hub_2.smb: rebuilding read digest 0x72535ee10f26e592, main 0x9d95007e0e59fd13\",",
+      "\"Fillet/blade_hub_2.smb: lowered volume 0x40c837c714d80c9b, main 0x40c837c714d80c99\",",
+      "\"Fillet/blade_hub_3.smb: read digest 0x1206fa077e86dc6b, main 0x239ea37fe6e8415a\",",
+      "\"Fillet/blade_hub_3.smb: rebuilding read digest 0xc3504466fd4495b, main 0x19b6267d7bab4376\",",
+      "\"Fillet/cliff_1.smb: read digest 0xc7f67de39540b843, main 0xda2e0b563fa35862\",",
+      "\"Fillet/cliff_1.smb: lazy trims digest 0xfa9ea7837c331c83, main 0x410172437ab22187\",",
+      "\"Fillet/cliff_1.smb: rebuilding read digest 0xd9580cf36d2b4dfd, main 0x41949589187dc360\",",
+      "\"Fillet/cliff_1.smb: area 0x40c8bf351a4d4318 / lowered 0x40c8bf351a4d4318, main 0x40c8bf351a4d4317\",",
+      "\"Fillet/cliff_1.smb: lowered volume 0x40cb1472e2cf47a4, main 0x40cb1472e2cf47a6\",",
+      "\"Fillet/cliff_2.smb: read digest 0x4fe42b58cc694aba, main 0x4830aab7f1df9f45\",",
+      "\"Fillet/cliff_2.smb: lazy trims digest 0xbacd09c989630ecf, main 0x8ce78a827602a435\",",
+      "\"Fillet/cliff_2.smb: rebuilding read digest 0x72535ee10f26e592, main 0x9d95007e0e59fd13\",",
+      "\"Fillet/cliff_2.smb: lowered volume 0x40c837c714d80c9b, main 0x40c837c714d80c99\",",
+      "\"Fillet/cyl_cyl_2191.smb: read digest 0x8f8d687053bb177a, main 0x828b24a619a790a1\",",
+      "\"Fillet/cyl_cyl_2191.smb: lazy trims digest 0x44e5ec04af0ef6e9, main 0xee88c4bf1729e813\",",
+      "\"Fillet/cyl_cyl_2191.smb: rebuilding read digest 0x6689da99f22e58e3, main 0xac041466db068115\",",
+      "\"Fillet/torii_fillet.smb: read digest 0x55506d353f0ef69f, main 0x8bd41358f6bbd5b2\",",
+      "\"Fillet/torii_fillet.smb: lazy trims digest 0x15ec324080ef0907, main 0x98ba90ffef54b4ca\",",
+      "\"Fillet/torii_fillet.smb: rebuilding read digest 0x76433718a5933f22, main 0xa397712e89e2cc3e\",",
+      "\"Fillet/torii_unioned.smb: rebuilding read digest 0x56fa9b1a553d0f5d, main 0x6b6ac489310cc557\",",
+      "\"Solids/fillet_ts.smb: read digest 0x369dbf3651d8cb5a, main 0x4a518a2b79a61d37\",",
+      "\"Solids/fillet_ts.smb: lazy trims digest 0x7cf0a61b32db44a4, main 0xdc7bcb6913cc1499\",",
+      "\"Solids/fillet_ts.smb: rebuilding read digest 0xe175ada0f97cfbb1, main 0x902514eb874e694\",",
+      "\"Solids/revolution2.smb: read digest 0x226aca322d7e4892, main 0xc244bc1a2ccee347\",",
+      "\"Solids/revolution2.smb: lazy trims digest 0x2060871c6a91b0f9, main 0x14f0ee52985b5a13\",",
+      "\"Solids/revolution2.smb: rebuilding read digest 0xc7afac8dcfddb94, main 0x6fbf2b74c3839734\",",
+      "\"Solids/revolution_mold.smb: read digest 0xa413d77bbe2c6cfe, main 0x462faca60ad813f0\",",
+      "\"Solids/revolution_mold.smb: lazy trims digest 0x2381a0a161c44972, main 0x88a9396a602fe93c\",",
+      "\"Solids/revolution_mold.smb: rebuilding read digest 0x826c2df1f21c79d8, main 0x692f780f5f318bf3\",",
+      "]",
+      "left: [\"Fillet/blade_hub_1.smb\", \"Fillet/blade_hub_2.smb\", \"Fillet/cliff_1.smb\", \"Fillet/cliff_2.smb\", \"Fillet/corner_box.smb\"]",
+      "right: [\"Fillet/corner_box.smb\"]"
+    ],
+    "solidcore::geometry heal_edge_tolerance_covers_edge_face_gap::moved_fillet_rows_keep_main_geometry_and_mass": [
+      "[",
+      "\"2 Fillet/corner_box.smb e8 r0.1: digest 0x2c402001afbae757, main 0xc9494b45a0f312d7\",",
+      "]"
+    ],
+    "solidcore::geometry wr_614_coincident_strip_crossing::curved_strip_join_union_is_one_valid_solid": [
+      "called `Result::unwrap()` on an `Err` value: Failed(Failure { operation: \"boolean::merge::p2::make_faceuse\", reason: Boolean(StageFailed { stage: Relate, what: \"the related vertex is not an end of the edge use\" }), site: Site { edge: None, face: None, vertex: None, at: None }, fit: None, cause: None, entity: None, status: 1001, origin: crates\\solidcore\\src\\error\\boolean.rs:266 })"
+    ]
+  },
+  "matching_failure_assertions_sha256": "b2dca2d503ee6b7508d01c9d52d1b95f6a918b521389f82989a906984a35dbbf",
+  "added_tests_that_passed": [
+    "solidcore::booleans issue_3218_defeature_limits::ring_grooves::a_ball_wholly_inside_the_missing_material_keeps_its_region",
+    "solidcore::booleans issue_3218_defeature_limits::ring_grooves::a_refused_step_groove_still_allows_the_independent_square_groove_in_either_order",
+    "solidcore::booleans issue_3218_defeature_limits::ring_grooves::a_sleeve_blocks_one_groove_and_the_other_still_comes_off",
+    "solidcore::booleans issue_3218_defeature_limits::ring_grooves::both_circles_bound_one_wall_on_a_shaft_frustum_or_bore",
+    "solidcore::booleans issue_3218_defeature_limits::ring_grooves::cylinder_and_cone_continue_to_the_circle_where_they_meet",
+    "solidcore::booleans issue_3218_defeature_limits::ring_grooves::supports_that_cannot_reach_each_other_leave_the_groove_unchanged"
+  ]
+}
