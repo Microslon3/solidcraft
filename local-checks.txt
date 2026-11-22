@@ -19,3 +19,14 @@ PASS surface.surface_p2 cases=17593 changed=0 added=0 removed=0 broken=0 known_f
 Golden corpus on the patched tree
 PASS blend.fillet_removal cases=170 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=462.933s
 PASS surface.surface_p2 cases=17593 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=414.935s
+
+Implementation commit 3e21ded0e283dd49b5c103bef9093fbf58f36f8d
+Standalone SolidCore tests
+Summary [2073.391s] 9580 tests run: 9580 passed (23 slow), 82 skipped
+
+Optimized golden corpus in cargo xtask fast
+PASS blend.fillet_removal cases=170 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=21.254s
+PASS surface.surface_p2 cases=17593 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=19.017s
+
+Both Clippy workspace runs and the wasm32-unknown-unknown kernel check passed.
+The raw application test exit made cargo xtask fast return 1. Its 18 failures are registered in tests/KNOWN_FAILING_TESTS. The official JUnit grader reported no regression.
