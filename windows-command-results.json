@@ -1,0 +1,300 @@
+{
+  "source_commit": "499b7554cfdcd5baa1f513b4c6a3f17cd704ddd2",
+  "platform": "Windows x64, MSVC",
+  "command": "face.delete",
+  "cases": {
+    "rect": {
+      "passed": true,
+      "closed": true,
+      "faces": 3,
+      "face_types": {
+        "cylinder": 1,
+        "plane": 2
+      },
+      "volume": 1570.7963267948967,
+      "expected_volume": 1570.7963267948965,
+      "volume_difference": 2.2737367544323206e-13,
+      "extents": [
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          0.0,
+          20.0
+        ]
+      ]
+    },
+    "v": {
+      "passed": true,
+      "closed": true,
+      "faces": 3,
+      "face_types": {
+        "cylinder": 1,
+        "plane": 2
+      },
+      "volume": 1570.7963267948967,
+      "expected_volume": 1570.7963267948965,
+      "volume_difference": 2.2737367544323206e-13,
+      "extents": [
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          0.0,
+          20.0
+        ]
+      ]
+    },
+    "round": {
+      "passed": true,
+      "closed": true,
+      "faces": 3,
+      "face_types": {
+        "cylinder": 1,
+        "plane": 2
+      },
+      "volume": 1570.796326794897,
+      "expected_volume": 1570.7963267948965,
+      "volume_difference": 4.547473508864641e-13,
+      "extents": [
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          0.0,
+          20.0
+        ]
+      ]
+    },
+    "frustum": {
+      "passed": true,
+      "closed": true,
+      "faces": 3,
+      "face_types": {
+        "cone": 1,
+        "plane": 2
+      },
+      "volume": 1591.7402778188284,
+      "expected_volume": 1591.7402778188286,
+      "volume_difference": -2.2737367544323206e-13,
+      "extents": [
+        [
+          -6.0,
+          6.0
+        ],
+        [
+          -6.0,
+          6.0
+        ],
+        [
+          0.0,
+          20.0
+        ]
+      ]
+    },
+    "bore": {
+      "passed": true,
+      "closed": true,
+      "faces": 4,
+      "face_types": {
+        "cylinder": 2,
+        "plane": 2
+      },
+      "volume": 2513.274122871834,
+      "expected_volume": 2513.2741228718346,
+      "volume_difference": -4.547473508864641e-13,
+      "extents": [
+        [
+          -7.000000000000001,
+          7.0
+        ],
+        [
+          -7.0,
+          7.0
+        ],
+        [
+          0.0,
+          20.000000000000004
+        ]
+      ]
+    },
+    "shoulder": {
+      "passed": true,
+      "closed": true,
+      "faces": 5,
+      "face_types": {
+        "cylinder": 2,
+        "plane": 3
+      },
+      "volume": 1872.3892215395167,
+      "expected_volume": 1872.3892215395167,
+      "volume_difference": 0.0,
+      "extents": [
+        [
+          -7.000000000000001,
+          7.0
+        ],
+        [
+          -7.0,
+          7.0
+        ],
+        [
+          0.0,
+          20.000000000000004
+        ]
+      ]
+    },
+    "tilted": {
+      "passed": true,
+      "closed": true,
+      "faces": 3,
+      "face_types": {
+        "cylinder": 1,
+        "plane": 2
+      },
+      "volume": 1570.7963267948992,
+      "expected_volume": 1570.7963267948965,
+      "volume_difference": 2.7284841053187847e-12,
+      "extents": [
+        [
+          26.0,
+          36.00000000000001
+        ],
+        [
+          -21.0,
+          -1.0
+        ],
+        [
+          5.999999999999999,
+          28.000000000000004
+        ]
+      ]
+    },
+    "imported": {
+      "passed": true,
+      "closed": true,
+      "faces": 3,
+      "face_types": {
+        "cylinder": 1,
+        "plane": 2
+      },
+      "volume": 1570.7963267948967,
+      "expected_volume": 1570.7963267948965,
+      "volume_difference": 2.2737367544323206e-13,
+      "extents": [
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          -5.0,
+          5.0
+        ],
+        [
+          0.0,
+          20.0
+        ]
+      ]
+    }
+  },
+  "design_saved_in_0.45.0": {
+    "healed": {
+      "names": [
+        "F2:side:l7",
+        "F2:side:l6",
+        "F2:side:l1"
+      ],
+      "exact": [
+        true,
+        true,
+        true
+      ],
+      "volume": 1570.7963267948967
+    },
+    "reopened_names": [
+      "F2:side:l7",
+      "F2:side:l6",
+      "F2:side:l1"
+    ],
+    "draft_of_current_wall": {
+      "name": "F2:side:l6",
+      "expected": 1361.598786403943,
+      "volume": 1361.5987864039434
+    },
+    "offset_of_original_cap": {
+      "original": "F2:side:l7",
+      "volume": 1727.8759594743863,
+      "maximum_z": 22.0
+    }
+  },
+  "two_grooves_in_separate_commands": {
+    "4": {
+      "selection_order": [
+        4,
+        12
+      ],
+      "volumes": [
+        1457.6989912656645,
+        1570.796326794897
+      ],
+      "faces": [
+        7,
+        3
+      ],
+      "edges": [
+        9,
+        3
+      ]
+    },
+    "12": {
+      "selection_order": [
+        12,
+        4
+      ],
+      "volumes": [
+        1457.6989912656643,
+        1570.796326794898
+      ],
+      "faces": [
+        7,
+        3
+      ],
+      "edges": [
+        9,
+        3
+      ]
+    }
+  },
+  "disconnected_selection_in_one_command": {
+    "refusal": "invalid input: Delete Face: face 1 (a plane), borders face 0, a cylinder: include face 0 in the selection if it should go too, or take off the feature that made face 0 in the timeline instead",
+    "faces": 11,
+    "edges": 15,
+    "volume": 1344.6016557364314,
+    "classifications": [
+      "outside",
+      "outside",
+      "inside"
+    ],
+    "unchanged_queries": [
+      "model.faces",
+      "inspect.measure",
+      "inspect.classify_points",
+      "model.body_features"
+    ]
+  }
+}

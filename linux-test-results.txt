@@ -1,0 +1,27 @@
+SolidCraft 499b7554cfdcd5baa1f513b4c6a3f17cd704ddd2, Linux x86_64
+Git tree 1b0a4f8d865539851743cb6bb202df6c0c6f0303
+Rust 1.99.1, cargo-nextest 0.9.150
+Pinned TestFiles 3fd5b9548d19aa8c12c29bc9637a96d42a06f8a5
+
+SolidCore workspace selection
+Starting 9440 tests across 43 binaries (81 tests skipped)
+Summary [2094.920s] 9440 tests run: 9440 passed (38 slow), 81 skipped
+
+Application kernel
+Starting 1052 tests across 9 binaries (8 tests and 1 binary skipped, including 2 tests and 1 binary via profile.ci.default-filter)
+FAIL [  73.775s] (  10/1052) solidcraft-kernel corner_g2::tests::a_long_setback_keeps_the_g2_patch_inside_the_box
+FAIL [  26.150s] (  12/1052) solidcraft-kernel blend::corner_tests::a_round_ending_in_an_earlier_round_matches_both_together
+FAIL [   1.062s] (  85/1052) solidcraft-kernel blend_corner::tests::issue2422_vertical_after_separate_bottom_rounds
+FAIL [  12.338s] ( 223/1052) solidcraft-kernel corner_g2::tests::curvature_rounds_meet_at_a_g2_corner
+FAIL [  14.981s] ( 247/1052) solidcraft-kernel corner_g2::tests::the_box_corner_g2_patch_is_a_closed_solid_curvature_continuous_to_its_neighbours
+Summary [ 923.518s] 1052 tests run: 1047 passed (12 slow), 5 failed, 8 skipped
+known-failing: 1052 ran, 1047 pass, 5 known failing, 12 listed did not run here; no regression
+
+Reference suites
+PASS blend.feature_executive cases=149 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=473.153s
+PASS topology.brep_p5 cases=797 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=0.353s
+goldens: 2 unit(s), 2 passed, 0 failed
+
+Static analysis and WebAssembly
+fast: all checks passed. CI runs the full gate; the merge queue the heavy tests.
+panic-sites: passed
