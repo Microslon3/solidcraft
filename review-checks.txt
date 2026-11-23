@@ -1,0 +1,105 @@
+SolidCraft #19623 after pull request review
+Base commit       5580b969897e03fe01f3dbac0b2675ee5acdb259
+Implementation   861d58fc75d08475a5b6e64bc97638050da79d5d
+Patched tree      804aff1810b5735123523e0e641d402c33ef8f60
+
+Application tests selected by cargo xtask fast
+Summary [1376.040s] 8030 tests run: 8012 passed (17 slow), 18 failed, 50 skipped
+known-failing: 8027 ran, 8009 pass, 18 known failing, 2 listed did not run here; no regression
+
+Passing Delete Face application-kernel tests
+delete_face::tests::delete_a_round_ending_on_a_ridge
+delete_face::tests::delete_fillet_chamfer_hole_and_boss_faces
+delete_face::tests::delete_open_rim_of_step_block_keeps_the_unselected_bore
+delete_face::tests::delete_split_rim_keeps_both_supports_and_records_their_sharp_meeting
+delete_face::tests::delete_step_ball_root_grows_its_spherical_support_back_to_the_plate
+delete_face::tests::deleting_a_v_notch_or_groove_extends_the_plane_across_it
+delete_face::tests::deleting_on_a_sheet_leaves_its_free_boundary_open
+delete_face::tests::filling_across_faces_on_two_surfaces_remakes_their_pcurves
+delete_face::tests::issue1557_delete_closed_fillet_ring_keeps_the_floor
+delete_face::tests::two_grooves_beside_one_strip_both_fill
+delete_face::tests::unclosable_gap_refusal_omits_internal_brep_text
+
+Standalone SolidCore tests selected by cargo xtask fast
+Summary [1551.611s] 9588 tests run: 9588 passed (15 slow), 82 skipped
+
+Fillet removal, including cancellation and original rail tolerances
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 799 filtered out; finished in 110.56s
+
+Focused tests for the review revision
+PASS [   0.007s] (1/4) solidcore blend::fillet_removal::chain::tests::chain_validation_identifies_the_check_that_refused_the_edit
+PASS [   0.008s] (2/4) solidcore geom::object::tests::an_atomic_edit_commits_owner_links_in_order_and_discards_them_on_unwind
+PASS [   0.023s] (3/4) solidcore blend::fillet_removal::chain::tests::a_conic_support_intersection_names_the_unsupported_sharp_curve
+PASS [   0.049s] (4/4) solidcore surface::surface::exact_pieces::tests::a_clamped_plane_keeps_the_derivative_along_its_boundary
+
+Golden corpus on the base commit
+PASS blend.fillet_removal cases=170 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=325.395s
+PASS geom.context cases=2013 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=0.497s
+PASS geom.object cases=624 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=4.450s
+PASS surface.surface_p2 cases=17593 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=456.792s
+PASS topology.brep_p3 cases=1358 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=2351.721s
+PASS topology.brep_validation cases=69 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=3.626s
+
+Golden corpus on the patched tree
+PASS blend.fillet_removal cases=170 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=12.600s
+PASS geom.context cases=2013 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=0.244s
+PASS geom.object cases=624 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=0.268s
+PASS surface.surface_p2 cases=17593 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=11.411s
+PASS topology.brep_p3 cases=1358 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=51.462s
+PASS topology.brep_validation cases=69 changed=0 added=0 removed=0 broken=0 known_failing=0 rust=0.165s
+
+Native bodies
+case=hemisphere-rim-round-deleted
+deleted FEV=[2, 3, 3] volume=261.799387799149 area=235.619449019235 manifold=true outward=true Level2=[]
+case=ball-on-plate-root-round-deleted
+deleted FEV=[4, 6, 5] volume=485.899663755221 area=552.920307031804 manifold=true outward=true Level2=[]
+case=rounded-box-top-rim-chain-deleted
+deleted FEV=[10, 24, 16] volume=1858.194671058465 area=935.345115136926 manifold=true outward=true Level2=[]
+case=domed-post-cap-turned-rounds-deleted
+deleted FEV=[3, 5, 4] volume=356.047167406843 area=263.893782901124 manifold=true outward=true Level2=[]
+case=double-frustum-turned-rounds-deleted
+deleted FEV=[4, 6, 4] volume=368.613538021202 area=263.193483068949 manifold=true outward=true Level2=[]
+case=turned-post-cone-turned-rounds-deleted
+deleted FEV=[4, 6, 4] volume=634.601716025138 area=389.557489045007 manifold=true outward=true Level2=[]
+case=sectioned-rounded-box-open-chain
+deleted FEV=[8, 18, 12] volume=929.097335529233 area=627.672557568463 manifold=true outward=true Level2=[]
+
+Record round trips
+case=hemisphere-rim-round-deleted
+deleted FEV=[2, 3, 3] volume=261.799387799149 area=235.619449019235 manifold=true outward=true Level2=[]
+case=ball-on-plate-root-round-deleted
+deleted FEV=[4, 6, 5] volume=485.899663755221 area=552.920307031804 manifold=true outward=true Level2=[]
+case=rounded-box-top-rim-chain-deleted
+deleted FEV=[10, 24, 16] volume=1858.194671058465 area=935.345115136926 manifold=true outward=true Level2=[]
+case=domed-post-cap-turned-rounds-deleted
+deleted FEV=[3, 5, 4] volume=356.047167406843 area=263.893782901124 manifold=true outward=true Level2=[]
+case=double-frustum-turned-rounds-deleted
+deleted FEV=[4, 6, 4] volume=368.613538021202 area=263.193483068949 manifold=true outward=true Level2=[]
+case=turned-post-cone-turned-rounds-deleted
+deleted FEV=[4, 6, 4] volume=634.601716025138 area=389.557489045007 manifold=true outward=true Level2=[]
+case=sectioned-rounded-box-open-chain
+deleted FEV=[8, 18, 12] volume=929.097335529233 area=627.672557568463 manifold=true outward=true Level2=[]
+
+Native and STEP records
+step-open-bore FEV=[9, 21, 14] volume=1849.827427359360 area=1016.686933597791 manifold=true outward=true Level2=[]
+native-open-bore FEV=[9, 21, 14] volume=1849.827427359360 area=1016.686933597791 manifold=true outward=true Level2=[]
+step-block FEV=[10, 24, 16] volume=1858.194671058465 area=935.345115136926 manifold=true outward=true Level2=[]
+native-block FEV=[10, 24, 16] volume=1858.194671058465 area=935.345115136926 manifold=true outward=true Level2=[]
+step-hemisphere FEV=[2, 3, 3] volume=261.799387799149 area=235.619449019234 manifold=true outward=true Level2=[]
+native-hemisphere FEV=[2, 3, 3] volume=261.799387799149 area=235.619449019235 manifold=true outward=true Level2=[]
+step-ball-plate FEV=[4, 6, 5] volume=485.899663755221 area=552.920307031804 manifold=true outward=true Level2=[]
+native-ball-plate FEV=[4, 6, 5] volume=485.899663755221 area=552.920307031804 manifold=true outward=true Level2=[]
+
+Turned and spherical STEP bodies
+domed-post-cap-turned-rounds-deleted FEV=[3, 5, 4] volume=356.047167406843 area=263.893782901131 manifold=true outward=true Level2=[]
+double-frustum-turned-rounds-deleted FEV=[4, 6, 4] volume=368.613538021202 area=263.193483068949 manifold=true outward=true Level2=[]
+turned-post-cone-turned-rounds-deleted FEV=[4, 6, 4] volume=634.601716025138 area=389.557489045007 manifold=true outward=true Level2=[]
+hemisphere-rim-round-deleted FEV=[2, 3, 3] volume=261.799387799149 area=235.619449019235 manifold=true outward=true Level2=[]
+ball-on-plate-root-round-deleted FEV=[4, 6, 5] volume=485.899663755221 area=552.920307031804 manifold=true outward=true Level2=[]
+
+Callback order on the 18-face rounded block
+The successful edit removed eight faces. All 994 user and system callbacks matched the original implementation in order and payload.
+Cancelling restored all 18 faces. The original implementation emitted 994 callbacks and the revised edit emitted zero.
+SHA-256 of both successful event streams  4880b82c6ba8b2552213b49d240bddafc5656f5f3781a79b48676999a53257f6
+All 46 rail budgets in the seven Native models kept their original stored value.
+All 46 rail budgets in the seven STEP models kept their original stored value.

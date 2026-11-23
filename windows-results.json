@@ -1,8 +1,8 @@
 {
   "version": "solidcraft-cli 0.46.2",
-  "source_tree": "b11669277fd6e2405f41fcde5da1ee78876b96c5",
+  "source_tree": "804aff1810b5735123523e0e641d402c33ef8f60",
   "base_commit": "5580b969897e03fe01f3dbac0b2675ee5acdb259",
-  "windows_binary_sha256": "424b45d836cbcf22e0a03a225a8ce48782f2b8898749e33f6642aa70993478b0",
+  "windows_binary_sha256": "ca9f0491ead3aa684701ae7bec0cd970cddc872a075515fbabdff481b00f2969",
   "units": {
     "volume": "mm3",
     "area": "mm2"
