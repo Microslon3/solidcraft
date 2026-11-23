@@ -1,0 +1,4 @@
+Cube at x=[15, 25], closed=true, volume=1000
+Cube at x=[30, 40], closed=true, volume=1000
+Cube at x=[45, 55], closed=true, volume=1000
+3 bodies, total volume 3000
